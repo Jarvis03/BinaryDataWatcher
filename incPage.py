@@ -8,45 +8,45 @@
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 
-class Ui_Form(object):
-    def setupUi(self, Form):
-        Form.setObjectName("Form")
-        Form.resize(714, 322)
-        self.horizontalLayout = QtWidgets.QHBoxLayout(Form)
-        self.horizontalLayout.setObjectName("horizontalLayout")
-        self.gridLayout = QtWidgets.QGridLayout()
+class Ui_MainWindow(object):
+    def setupUi(self, MainWindow):
+        MainWindow.setObjectName("MainWindow")
+        MainWindow.resize(608, 341)
+        self.centralwidget = QtWidgets.QWidget(MainWindow)
+        self.centralwidget.setObjectName("centralwidget")
+        self.gridLayout = QtWidgets.QGridLayout(self.centralwidget)
         self.gridLayout.setObjectName("gridLayout")
-        self.textEdit = QTextEdit_AppendEnable(Form)
+        self.textEdit = QTextEdit_AppendEnable(self.centralwidget)
         font = QtGui.QFont()
         font.setPointSize(8)
         self.textEdit.setFont(font)
         self.textEdit.setReadOnly(True)
         self.textEdit.setObjectName("textEdit")
         self.gridLayout.addWidget(self.textEdit, 0, 0, 1, 2)
-        self.btn_clear = QtWidgets.QPushButton(Form)
-        self.btn_clear.setObjectName("btn_clear")
-        self.gridLayout.addWidget(self.btn_clear, 1, 1, 1, 1)
-        self.btn_stop = QtWidgets.QPushButton(Form)
+        self.frame = QtWidgets.QFrame(self.centralwidget)
+        self.frame.setFrameShape(QtWidgets.QFrame.StyledPanel)
+        self.frame.setFrameShadow(QtWidgets.QFrame.Raised)
+        self.frame.setObjectName("frame")
+        self.gridLayout.addWidget(self.frame, 0, 2, 2, 1)
+        self.btn_stop = QtWidgets.QPushButton(self.centralwidget)
         self.btn_stop.setCheckable(True)
         self.btn_stop.setChecked(False)
         self.btn_stop.setObjectName("btn_stop")
         self.gridLayout.addWidget(self.btn_stop, 1, 0, 1, 1)
-        self.gridLayout.setColumnMinimumWidth(0, 180)
-        self.gridLayout.setColumnMinimumWidth(1, 180)
-        self.horizontalLayout.addLayout(self.gridLayout)
-        self.graphicsView = QtWidgets.QGraphicsView(Form)
-        self.graphicsView.setObjectName("graphicsView")
-        self.horizontalLayout.addWidget(self.graphicsView)
+        self.btn_clear = QtWidgets.QPushButton(self.centralwidget)
+        self.btn_clear.setObjectName("btn_clear")
+        self.gridLayout.addWidget(self.btn_clear, 1, 1, 1, 1)
+        self.gridLayout.setColumnMinimumWidth(0, 100)
+        self.gridLayout.setColumnMinimumWidth(1, 100)
+        MainWindow.setCentralWidget(self.centralwidget)
 
-        self.retranslateUi(Form)
-        self.btn_clear.clicked.connect(self.textEdit.clear)
-        self.btn_stop.clicked['bool'].connect(Form.Pause)
-        QtCore.QMetaObject.connectSlotsByName(Form)
+        self.retranslateUi(MainWindow)
+        QtCore.QMetaObject.connectSlotsByName(MainWindow)
 
-    def retranslateUi(self, Form):
+    def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
-        Form.setWindowTitle(_translate("Form", "Form"))
-        self.btn_clear.setText(_translate("Form", "清空"))
-        self.btn_stop.setText(_translate("Form", "暂停"))
+        MainWindow.setWindowTitle(_translate("MainWindow", "MainWindow"))
+        self.btn_stop.setText(_translate("MainWindow", "暂停"))
+        self.btn_clear.setText(_translate("MainWindow", "清空"))
 
 from MyWidgets import QTextEdit_AppendEnable
