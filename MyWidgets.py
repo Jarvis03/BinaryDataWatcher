@@ -6,72 +6,93 @@ import serial
 import serial.tools.list_ports
 
 import matplotlib
-from PyQt5.QtWidgets import QSizePolicy
+from PyQt5.QtWidgets import QSizePolicy, QVBoxLayout, QLineEdit
 
 matplotlib.use('Qt5Agg')
 
 import  numpy as np
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qt5 import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 
-class MyMplCanvas(FigureCanvas):
-    def __init__(self, parent=None, width=5, height=4, dpi=100):
-
-        fig = Figure(figsize=(width, height), dpi=dpi)
-        self.axes = fig.add_subplot(111)
-
-        self.axes.grid('on')
-        FigureCanvas.__init__(self, fig)
-        self.setParent(parent)
-
-        FigureCanvas.setSizePolicy(self, QSizePolicy.Expanding, QSizePolicy.Expanding)
-        FigureCanvas.updateGeometry(self)
-
-    def f(self,t):
-        return np.exp(-t) * np.cos(2 * np.pi * t)
-
-    def compute_initial_figure(self):
-        t1 = np.arange(0.0, 5.0, 0.1)
-        t2 = np.arange(0.0, 5.0, 0.02)
-
-        plt.figure(1)
-        plt.subplot(211)
-        plt.plot(t1, self.f(t1), 'bo', t2, self.f(t2), 'k')
-
-        plt.subplot(212)
-        plt.plot(t2, np.cos(2 * np.pi * t2), 'r--')
-        plt.show()
-
-        # t1 = np.arange(0.0, 5.0, 0.1)
-        # t2 = np.arange(0.0, 5.0, 0.02)
-        #
-        # self.axes2.plot(t1, self.f(t1), 'bo', t2, self.f(t2), 'k')
-        # self.axes.plot(t2, np.cos(2 * np.pi * t2), 'r--')
+import time
 
 
+def get_time_stamp(ct):
+    local_time = time.localtime(ct)
+    data_head = time.strftime("%Y-%m-%d %H:%M:%S", local_time)
+    data_secs = (ct - int(ct)) * 1000
+    time_stamp = "%s.%03d" % (data_head, data_secs)
 
-# import matplotlib
-# matplotlib.use('Qt5Agg')
-# # 使用 matplotlib中的FigureCanvas (在使用 Qt5 Backends中 FigureCanvas继承自QtWidgets.QWidget)
-# from matplotlib.figure import Figure
-# from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-#
-# class Figure_Canvas(FigureCanvas):   # 通过继承FigureCanvas类，使得该类既是一个PyQt5的Qwidget，又是一个matplotlib的FigureCanvas，这是连接pyqt5与matplot                                          lib的关键
-#
-#     def __init__(self, parent=None, width=11, height=5, dpi=100):
-#         fig = Figure(figsize=(width, height), dpi=100)  # 创建一个Figure，注意：该Figure为matplotlib下的figure，不是matplotlib.pyplot下面的figure
-#
-#         FigureCanvas.__init__(self, fig) # 初始化父类
-#         self.setParent(parent)
-#
-#         self.axes = fig.add_subplot(111) # 调用figure下面的add_subplot方法，类似于matplotlib.pyplot下面的subplot方法
-#
-#     def test(self):
-#         x = [1,2,3,4,5,6,7,8,9]
-#         y = [23,21,32,13,3,132,13,3,1]
-#         self.axes.plot(x, y)
+    return time_stamp
 
+class MyFigureCanvas(QtWidgets.QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        plt.rcParams['font.sans-serif'] = ['FangSong']  # 指定默认字体
+        plt.rcParams['axes.unicode_minus'] = False
+
+        self.figure = Figure((5.0, 4.0), dpi=100)
+
+        self.canvas = FigureCanvas(self.figure)
+        self.canvas.setParent(self)
+        self.toolbar = NavigationToolbar(self.canvas, self)
+
+        self.textbox = QLineEdit()
+        self.textbox.setMinimumWidth(200)
+
+        vbox = QVBoxLayout(self)
+        vbox.addWidget(self.toolbar)
+        vbox.addWidget(self.canvas)
+
+    def myDraw(self,ld):
+        pass
+
+class MyFigure_Inc(MyFigureCanvas):
+    def __init__(self, parent=None):
+        self.x = list()
+        self.y = list()
+        self.t = list()
+
+        super().__init__(parent)
+        self.axes = self.figure.add_subplot(111)
+        self.axes.grid(True)
+        self.axes.set_title("倾斜仪读数显示", fontsize=11)
+
+    def myDraw(self, ld):
+        self.axes.clear()
+        for d in ld:
+            self.x.append(d[1])
+            self.y.append(d[2])
+            self.t.append(int(d[0]))
+            break
+        if len(self.t) > 3600:
+            del self.x[0]
+            del self.y[0]
+            del self.t[0]
+
+        self.line_x = self.axes.plot(self.t, self.x, label='X 方向倾角', color='r')
+        self.line_y = self.axes.plot(self.t, self.y, label='Y 方向倾角', color='g')
+
+        self.axes.legend(loc='best', fontsize=9)
+        self.canvas.draw()
+
+class MyFigure_Imu(MyFigureCanvas):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        self .axList = list()
+        title = ['gyro_dx', 'gyro_dy', 'gyro_dz', 'acc_dx', 'acc_dy', 'acc_dz']
+        for a in range(6):
+            ax = self.figure.add_subplot(2,3,a+1)
+            ax.grid(True)
+            ax.set_title(title[a], fontsize=11)
+            self.axList.append(ax)
+
+    def myDraw(self, ld):
+        pass
 
 class QComboBox_SelSerialNum(QtWidgets.QComboBox):
     def __init__(self, parent=None):
@@ -101,53 +122,42 @@ class QTextEdit_AppendEnable(QtWidgets.QTextEdit):
     def setAppendeEnable(self, enable=True):
         self.appendEnable = enable
 
-
-
 class tabPage_Inclinometer(QtWidgets.QWidget):
-    def __init__(self,prent=None):
-        super().__init__(prent)
+    sinOnDraw = QtCore.pyqtSignal(list)
 
-        self.horizontalLayout = QtWidgets.QHBoxLayout(self)
-        self.horizontalLayout.setObjectName("horizontalLayout")
-        self.gridLayout = QtWidgets.QGridLayout()
+    def __init__(self,parent=None):
+        super().__init__(parent)
+
+        self.gridLayout = QtWidgets.QGridLayout(self)
         self.gridLayout.setObjectName("gridLayout")
         self.textEdit = QTextEdit_AppendEnable(self)
         font = QtGui.QFont()
         font.setPointSize(8)
         self.textEdit.setFont(font)
-        self.textEdit.setObjectName("textEdit")
         self.textEdit.setReadOnly(True)
+        self.textEdit.setObjectName("textEdit")
         self.gridLayout.addWidget(self.textEdit, 0, 0, 1, 2)
         self.btn_clear = QtWidgets.QPushButton(self)
         self.btn_clear.setObjectName("btn_clear")
-        self.gridLayout.addWidget(self.btn_clear, 1, 1, 1, 1)
+        self.gridLayout.addWidget(self.btn_clear, 1, 1, 2, 1)
         self.btn_stop = QtWidgets.QPushButton(self)
-        self.btn_stop.setObjectName("btn_stop")
         self.btn_stop.setCheckable(True)
         self.btn_stop.setChecked(False)
-        self.gridLayout.addWidget(self.btn_stop, 1, 0, 1, 1)
-        self.gridLayout.setColumnMinimumWidth(0, 180)
-        self.gridLayout.setColumnMinimumWidth(1, 180)
-        self.horizontalLayout.addLayout(self.gridLayout)
-        self.gphwidge = QtWidgets.QWidget()
-        self.gphwidge.setObjectName("graphicsView")
-        self.horizontalLayout.addWidget(self.gphwidge)
+        self.btn_stop.setObjectName("btn_stop")
+        self.gridLayout.addWidget(self.btn_stop, 2, 0, 1, 1)
+        self.widget = MyFigure_Inc(self)
+        self.widget.setObjectName("widget")
+        self.gridLayout.addWidget(self.widget, 0, 2, 3, 1)
+        self.gridLayout.setColumnMinimumWidth(0, 160)
+        self.gridLayout.setColumnMinimumWidth(1, 160)
+        self.gridLayout.setColumnMinimumWidth(2, 480)
 
         self.btn_stop.setText("暂停")
         self.btn_clear.setText("清空")
 
         self.btn_stop.clicked['bool'].connect(self.Pause)
         self.btn_clear.clicked.connect(self.textEdit.clear)
-
-        # dr = Figure_Canvas()
-        # # 实例化一个FigureCanvas
-        # dr.test()  # 画图
-        # graphicscene = QtWidgets.QGraphicsScene()  # 第三步，创建一个QGraphicsScene，因为加载的图形（FigureCanvas）不能直接放到graphicview控件中，必须先放到graphicScene，然后再把graphicscene放到graphicview中
-        # graphicscene.addWidget(dr)  # 第四步，把图形放到QGraphicsScene中，注意：图形是作为一个QWidget放到QGraphicsScene中的
-        # self.graphicsView.setScene(graphicscene)  # 第五步，把QGraphicsScene放入QGraphicsView
-        # self.graphicsView.show()  # 最后，调用show方法呈现图形！Voila!!
-        # #self.setCentralWidget(self.graphicview)
-        # #self.graphicsView.setFixedSize(800, 600)
+        self.sinOnDraw[list].connect(self.widget.myDraw)
 
     def Pause(self,pressed):
         if pressed:
@@ -157,8 +167,145 @@ class tabPage_Inclinometer(QtWidgets.QWidget):
             self.btn_stop.setText('暂停')
             self.textEdit.setAppendeEnable(True)
 
+    def Refresh(self, ld):
+        for d in ld:
+            ts = get_time_stamp(d[0])
+            self.textEdit.append(ts + ": "+ str(d[1:]))
+        self.sinOnDraw.emit(ld)
 
 class tabPage_Imu(QtWidgets.QWidget):
-    def __init__(self,prent=None):
-        super().__init__(prent)
+
+    def __init__(self,parent=None):
+        super().__init__(parent)
+
+        self.verticalLayout_2 = QtWidgets.QVBoxLayout(self)
+        self.verticalLayout_2.setObjectName("verticalLayout_2")
+        self.tableWidget = QtWidgets.QTableWidget(self)
+        self.tableWidget.setShowGrid(True)
+        self.tableWidget.setGridStyle(QtCore.Qt.DotLine)
+        self.tableWidget.setWordWrap(True)
+        self.tableWidget.setCornerButtonEnabled(True)
+        self.tableWidget.setRowCount(600)
+        self.tableWidget.setColumnCount(13)
+        self.tableWidget.setObjectName("tableWidget")
+        item = QtWidgets.QTableWidgetItem()
+        self.tableWidget.setVerticalHeaderItem(0, item)
+        item = QtWidgets.QTableWidgetItem()
+        self.tableWidget.setVerticalHeaderItem(1, item)
+        item = QtWidgets.QTableWidgetItem()
+        self.tableWidget.setVerticalHeaderItem(2, item)
+        item = QtWidgets.QTableWidgetItem()
+        self.tableWidget.setVerticalHeaderItem(3, item)
+        item = QtWidgets.QTableWidgetItem()
+        self.tableWidget.setVerticalHeaderItem(4, item)
+        item = QtWidgets.QTableWidgetItem()
+        self.tableWidget.setVerticalHeaderItem(5, item)
+        item = QtWidgets.QTableWidgetItem()
+        self.tableWidget.setVerticalHeaderItem(6, item)
+        item = QtWidgets.QTableWidgetItem()
+        self.tableWidget.setVerticalHeaderItem(7, item)
+        item = QtWidgets.QTableWidgetItem()
+        self.tableWidget.setVerticalHeaderItem(8, item)
+        item = QtWidgets.QTableWidgetItem()
+        self.tableWidget.setVerticalHeaderItem(9, item)
+        item = QtWidgets.QTableWidgetItem()
+        self.tableWidget.setHorizontalHeaderItem(0, item)
+        item = QtWidgets.QTableWidgetItem()
+        self.tableWidget.setHorizontalHeaderItem(1, item)
+        item = QtWidgets.QTableWidgetItem()
+        self.tableWidget.setHorizontalHeaderItem(2, item)
+        item = QtWidgets.QTableWidgetItem()
+        self.tableWidget.setHorizontalHeaderItem(3, item)
+        item = QtWidgets.QTableWidgetItem()
+        self.tableWidget.setHorizontalHeaderItem(4, item)
+        item = QtWidgets.QTableWidgetItem()
+        self.tableWidget.setHorizontalHeaderItem(5, item)
+        item = QtWidgets.QTableWidgetItem()
+        self.tableWidget.setHorizontalHeaderItem(6, item)
+        item = QtWidgets.QTableWidgetItem()
+        self.tableWidget.setHorizontalHeaderItem(7, item)
+        item = QtWidgets.QTableWidgetItem()
+        self.tableWidget.setHorizontalHeaderItem(8, item)
+        item = QtWidgets.QTableWidgetItem()
+        self.tableWidget.setHorizontalHeaderItem(9, item)
+        item = QtWidgets.QTableWidgetItem()
+        self.tableWidget.setHorizontalHeaderItem(10, item)
+        item = QtWidgets.QTableWidgetItem()
+        self.tableWidget.setHorizontalHeaderItem(11, item)
+        item = QtWidgets.QTableWidgetItem()
+        self.tableWidget.setHorizontalHeaderItem(12, item)
+        self.tableWidget.horizontalHeader().setCascadingSectionResizes(False)
+        self.tableWidget.horizontalHeader().setDefaultSectionSize(60)
+        self.tableWidget.horizontalHeader().setMinimumSectionSize(60)
+        self.tableWidget.verticalHeader().setVisible(False)
+        self.tableWidget.verticalHeader().setDefaultSectionSize(16)
+        self.tableWidget.verticalHeader().setMinimumSectionSize(16)
+        self.verticalLayout_2.addWidget(self.tableWidget)
+        self.widget = MyFigure_Imu(self)
+        self.widget.setObjectName("widget")
+        self.tableWidget.raise_()
+        self.verticalLayout_2.addWidget(self.widget)
+        self.horizontalLayout = QtWidgets.QHBoxLayout()
+        self.horizontalLayout.setSizeConstraint(QtWidgets.QLayout.SetFixedSize)
+        self.horizontalLayout.setObjectName("horizontalLayout")
+        self.label_starttime = QtWidgets.QLabel(self)
+        self.label_starttime.setObjectName("label_starttime")
+        self.horizontalLayout.addWidget(self.label_starttime)
+        self.label_duration = QtWidgets.QLabel(self)
+        self.label_duration.setObjectName("label_duration")
+        self.horizontalLayout.addWidget(self.label_duration)
+        self.label_frameCount = QtWidgets.QLabel(self)
+        self.label_frameCount.setObjectName("label_frameCount")
+        self.horizontalLayout.addWidget(self.label_frameCount)
+        self.btn_reset = QtWidgets.QPushButton(self)
+        self.btn_reset.setObjectName("btn_reset")
+        self.horizontalLayout.addWidget(self.btn_reset)
+        self.horizontalLayout.setStretch(0, 4)
+        self.horizontalLayout.setStretch(1, 2)
+        self.horizontalLayout.setStretch(2, 2)
+        self.verticalLayout_2.addLayout(self.horizontalLayout)
+        self.verticalLayout_2.setStretch(1, 3)
+        self.tableWidget.raise_()
+        self.btn_reset.raise_()
+        self.widget.raise_()
+
+        item = self.tableWidget.verticalHeaderItem(0)
+        item = self.tableWidget.horizontalHeaderItem(0)
+        item.setText("frameID")
+        item = self.tableWidget.horizontalHeaderItem(1)
+        item.setText( "gyro_dx")
+        item = self.tableWidget.horizontalHeaderItem(2)
+        item.setText( "gyro_dy")
+        item = self.tableWidget.horizontalHeaderItem(3)
+        item.setText( "gyro_zx")
+        item = self.tableWidget.horizontalHeaderItem(4)
+        item.setText( "acc_dx")
+        item = self.tableWidget.horizontalHeaderItem(5)
+        item.setText( "acc_dy")
+        item = self.tableWidget.horizontalHeaderItem(6)
+        item.setText( "acc_dz")
+        item = self.tableWidget.horizontalHeaderItem(7)
+        item.setText( "gyro_tx")
+        item = self.tableWidget.horizontalHeaderItem(8)
+        item.setText( "gyro_ty")
+        item = self.tableWidget.horizontalHeaderItem(9)
+        item.setText( "gyro_tz")
+        item = self.tableWidget.horizontalHeaderItem(10)
+        item.setText( "acc_tx")
+        item = self.tableWidget.horizontalHeaderItem(11)
+        item.setText( "acc_ty")
+        item = self.tableWidget.horizontalHeaderItem(12)
+        item.setText( "acc_tz")
+        self.label_starttime.setText( "端口启动时间：")
+        self.label_duration.setText( "运行时长：")
+        self.label_frameCount.setText( "接收数据总帧数")
+        self.btn_reset.setText( "复位")
+
+        self.btn_reset.clicked.connect(self.BtnResetTime)
+
+
+    def BtnResetTime(self):
+        pass
+
+    def Refresh(self, ld):
         pass

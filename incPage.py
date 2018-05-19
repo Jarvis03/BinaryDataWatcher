@@ -11,7 +11,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
-        MainWindow.resize(608, 341)
+        MainWindow.resize(750, 427)
         self.centralwidget = QtWidgets.QWidget(MainWindow)
         self.centralwidget.setObjectName("centralwidget")
         self.gridLayout = QtWidgets.QGridLayout(self.centralwidget)
@@ -23,21 +23,20 @@ class Ui_MainWindow(object):
         self.textEdit.setReadOnly(True)
         self.textEdit.setObjectName("textEdit")
         self.gridLayout.addWidget(self.textEdit, 0, 0, 1, 2)
-        self.frame = QtWidgets.QFrame(self.centralwidget)
-        self.frame.setFrameShape(QtWidgets.QFrame.StyledPanel)
-        self.frame.setFrameShadow(QtWidgets.QFrame.Raised)
-        self.frame.setObjectName("frame")
-        self.gridLayout.addWidget(self.frame, 0, 2, 2, 1)
+        self.btn_clear = QtWidgets.QPushButton(self.centralwidget)
+        self.btn_clear.setObjectName("btn_clear")
+        self.gridLayout.addWidget(self.btn_clear, 1, 1, 2, 1)
         self.btn_stop = QtWidgets.QPushButton(self.centralwidget)
         self.btn_stop.setCheckable(True)
         self.btn_stop.setChecked(False)
         self.btn_stop.setObjectName("btn_stop")
-        self.gridLayout.addWidget(self.btn_stop, 1, 0, 1, 1)
-        self.btn_clear = QtWidgets.QPushButton(self.centralwidget)
-        self.btn_clear.setObjectName("btn_clear")
-        self.gridLayout.addWidget(self.btn_clear, 1, 1, 1, 1)
-        self.gridLayout.setColumnMinimumWidth(0, 100)
-        self.gridLayout.setColumnMinimumWidth(1, 100)
+        self.gridLayout.addWidget(self.btn_stop, 2, 0, 1, 1)
+        self.widget = MyFigure_Inc(self.centralwidget)
+        self.widget.setObjectName("widget")
+        self.gridLayout.addWidget(self.widget, 0, 2, 3, 1)
+        self.gridLayout.setColumnMinimumWidth(0, 140)
+        self.gridLayout.setColumnMinimumWidth(1, 140)
+        self.gridLayout.setColumnMinimumWidth(2, 480)
         MainWindow.setCentralWidget(self.centralwidget)
 
         self.retranslateUi(MainWindow)
@@ -46,7 +45,7 @@ class Ui_MainWindow(object):
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
         MainWindow.setWindowTitle(_translate("MainWindow", "MainWindow"))
-        self.btn_stop.setText(_translate("MainWindow", "暂停"))
         self.btn_clear.setText(_translate("MainWindow", "清空"))
+        self.btn_stop.setText(_translate("MainWindow", "暂停"))
 
-from MyWidgets import QTextEdit_AppendEnable
+from MyWidgets import MyFigure_Inc, QTextEdit_AppendEnable

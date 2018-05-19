@@ -19,17 +19,24 @@ from SerialCfg import Ui_Dialog_SerialCfg
 from SelModelDlg import Ui_SelModel
 
 from MyWidgets import tabPage_Inclinometer
-
-from MyWidgets import  MyMplCanvas
-
-
+from MyWidgets import tabPage_Imu
+from MyWidgets import get_time_stamp
 
 
 
 class SerCfgDlg(QtWidgets.QDialog, Ui_Dialog_SerialCfg):
-    def __init__(self):
+    def __init__(self,model):
         super().__init__()
         self.setupUi(self)
+        if model == 1:
+            self.combox_baud.setCurrentIndex(2)
+            self.combox_parity.setCurrentIndex(0)
+        elif model == 2:
+            self.combox_baud.setCurrentIndex(0)
+            self.combox_parity.setCurrentIndex(1)
+            pass
+        else:
+            pass
 
     def GetCfg(self):
         serCfg = (self.combox_port.currentText(), int(self.combox_baud.currentText()),
@@ -57,11 +64,18 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
         super().__init__()
         self.setupUi(self)
 
-        self.serCfgDlg = SerCfgDlg()
-
         # 解码模式
         self.workmodel = model  # 1:imu,2:inclinometer
+        self.serTimeout = 0.0
+        self.serFre = 1
+        self.serPackLen = 0
+        self.serPackFrm = ''
+        self.fileTitle = ''
+
         self.InitWorkmodel(self.workmodel)
+
+        # 连接配置
+        self.serCfgDlg = SerCfgDlg(model)
 
         # 串口 COM1 serial
         self.serDict = {}
@@ -82,8 +96,9 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
         self.thGetData = threading.Thread()
         self.thGetFlag = False
 
-        # 数据
-        self.txtdataDict = { }
+        # 数据（解码->处理显示）的队列
+        self.dataQueue = { }
+        self.imuTempData = { }
 
         # 是否存储
         self.saveflagDict = { }
@@ -92,8 +107,7 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
         self.txtfileDict = { }
         self.rawfileDict = { }
 
-        self.sinRefresh[str,list].connect(self.RefreshEdit)
-        self.sinRefresh[str, list].connect(self.DrawGraph)
+        self.sinRefresh[str,list].connect(self.RefreshMainWin)
 
         if not os.path.exists('data'):
             os.makedirs('data')
@@ -104,11 +118,14 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
             self.serFre = 10
             self.serPackLen = 48
             self.serPackFrm = '<ccccHHHiiiiiihhhhhhBc'
+            self.fileTitle = '[time, gyro_dx, gyro_dy, gyro_dz, aac_dx, acc_dy, acc_tz, gyro_tx, gyro_ty, gyro_tz, aaa_tx, acc_ty, acc_tz, ' \
+                             'gyro_dxAvg, gyro_dyAvg, gyro_dzAvg, acc_dxAvg, acc_dxAvg, acc_dzAvg]'
         elif model == 2:  # inclinometer,len = 8, fre = 5 HZ
             self.serTimeout = 1.2
             self.serFre = 5
             self.serPackLen = 8
             self.serPackFrm = '>chhhc'   # 1 + 2*3 + 1 =  8: 0xaa, 0xxx,0xxx,0xxx,0xxx,0xxx,0xxx, 0xff
+            self.fileTitle = '[time, inc_x, inc_y, temperature]'
         else:
             pass
 
@@ -143,12 +160,16 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
                     self.serDict[cfg[0]] = ser
                     self.AddSerialMenu(cfg[0])
 
-                    # 创建数据存储(最长缓存36000条数据)
-                    self.txtdataDict[cfg[0]] = queue.Queue(36000)
+                    # 创建数据
+                    self.dataQueue[cfg[0]] = queue.Queue(100)
+
+                    # 缓存imu数据（100s*0HZ）
+                    self.imuTempData[cfg[0]] = list()
 
                     # 创建文件
                     fnamet =  'data\\' + cfg[0] + '_Data_' + time.strftime("%Y%m%d%H%M%S", time.localtime()) + '.txt'
                     self.txtfileDict[cfg[0]] = open(fnamet, 'w')
+                    self.txtfileDict[cfg[0]].write(self.fileTitle+'\r\n')
                     fnamer = 'data\\' + cfg[0] + '_Data_' + time.strftime("%Y%m%d%H%M%S", time.localtime()) + '.raw'
                     self.rawfileDict[cfg[0]] = open(fnamer, 'wb')
 
@@ -196,8 +217,8 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
                 self.rawfileDict[serPort].close()
                 del self.txtfileDict[serPort]
                 del self.rawfileDict[serPort]
-                del self.txtdataDict[serPort]
                 del self.saveflagDict[serPort]
+                del self.dataQueue[serPort]
 
                 self.DelSerialMenu(serPort)
         except serial.SerialException as e:
@@ -266,7 +287,9 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
     def NewTabPage(self, model, serPort):
         try:
             if model == 1:
-                pass
+                page = tabPage_Imu()
+                page.setObjectName("tab_" + serPort)
+                return page
             elif model == 2:
                 page = tabPage_Inclinometer()
                 page.setObjectName("tab_" + serPort)
@@ -318,11 +341,11 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
                     data = list()
                     while True:
                         try:
-                            data.append(self.txtdataDict[p].get_nowait())
+                            data.append(self.dataQueue[p].get_nowait())
                         except queue.Empty:
                             break
                     # 实时显示
-                    self.sinRefresh.emit(p,data)
+                    self.sinRefresh.emit(p, data)
                 time.sleep(1)
         except Exception as err:
             QMessageBox.information(self, "Thread_GetData", str(err), QMessageBox.Ok)
@@ -350,18 +373,18 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
                 pack = struct.unpack('>chhhc', bindata[index:index + self.serPackLen])
 
                 # 加入时间标记
-                t,ts = self.get_time_stamp()
-                lpack = str([ts, pack[1] / 1000, pack[2] / 1000, pack[3] / 10 ])
-                #print(lpack)
-
-                self.txtdataDict[port].put(lpack)
+                t = time.time()
+                ts = get_time_stamp(t)
+                lpack = [t, pack[1] / 1000, pack[2] / 1000, pack[3] / 10 ]
+                wpack = str([ts, pack[1] / 1000, pack[2] / 1000, pack[3] / 10])
+                self.dataQueue[port].put(lpack)
 
                 # 解码后的数据存文件
-                if int(t) % 86400 == 0:
+                if int(t+28800) % 86400 == 0:
                     self.txtfileDict[port].close()
                     self.txtfileDict[port] = open('data\\' + port + '_Data_' + time.strftime("%Y%m%d%H%M%S", time.localtime()) + '.txt', 'w')
                 if self.saveflagDict[port] == True:
-                    self.txtfileDict[port].writelines(lpack+'\n')
+                    self.txtfileDict[port].writelines(wpack+'\n')
                 index += self.serPackLen
             return bytes()
         except Exception as err:
@@ -381,60 +404,79 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
                 if len(bindata[index:]) < self.serPackLen:
                     return bindata[index:]
 
-                # 校验错误
-                # ck = 0x00
-                # for b in bindata[index:index + self.serPackLen-1]:
-                #     ck += b
-                # if bindata[index+self.serPackLen-1] != ck:
-                #     continue
+                # 校验判断
+                ck = 0x00
+                for b in bindata[index:index + self.serPackLen-2]:
+                    ck += b
+                if bindata[index+self.serPackLen-1] != ck%256:
+                    # 校验错误
+                    index += self.serPackLen
+                    print('数据包校验错误！！！')
+                    continue
 
                 # 解码
                 pack = ()
                 pack = struct.unpack('<ccccHHHiiiiiihhhhhhBc', bindata[index:index + self.serPackLen])
 
                 # 加入时间戳
-                t, ts = self.get_time_stamp()
+                t = time.time()
+                ts = get_time_stamp(t)
 
                 lpack = list()
-                lpack.append(t)
+                # lpack 内容
+                # time, gyro_dx, gyro_dy, gyro_dz, aac_dx, acc_dy, acc_z, gyro_tx, gyro_ty, gyro_tz, aaa_tx, acc_ty, acc_tz
                 lpack.append(pack[6])
                 for i in range(6):
                     lpack.append(round(pack[7 + i] * 1e-5, 8))
                 for i in range(6):
                     lpack.append(round(pack[13 + i] * 0.1, 1))
 
-                lpack = str(lpack)
+                lpack.insert(0, t)
+
+                # 加入解码完成的队列
+                self.dataQueue[port].put(lpack)
                 print(lpack)
 
-                self.txtdataDict[port].put(lpack)
+                # 写入缓存数据李彪
+                self.imuTempData[port].append(lpack)
 
-                if self.saveflagDict[port] == True:
-                    self.txtfileDict[port].writelines(lpack+'\n')
+                # 是否需要写文件（100s一次）
+                if self.imuTempData[port][-1][1] % 100 == 0:
+                    lavg = self.calculateAverage(port)
+
+                    # 写文件
+                    for l in self.imuTempData[port]:
+                        self.txtfileDict[port].writelines(str(l + lavg) + '\n')
+
+                    # 清空缓存数据
+                    self.imuTempData[port] = list()
+
+                # 更新index
                 index += self.serPackLen
+
             return bytes()
         except Exception as err:
             QMessageBox.information(self, "PorcessInclinometer", str(err), QMessageBox.Ok)
 
-    def RefreshEdit(self,serPort,ld):
-        if serPort not in self.tab_pageDict:
-            return
-        try:
-            for d in ld:
-                self.tab_pageDict[serPort].textEdit.append(d)
-        except Exception as err:
-            QMessageBox.information(self, "RefreshEdit", str(err), QMessageBox.Ok)
+    def calculateAverage(self, port):
+        # 计算当前所有已解析数据的均值
+        lc = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        for l in self.imuTempData[port]:
+            for i in range(6):
+                lc[i] += l[i + 2]
+        for l in range(6):
+            lc[l] = round(lc[l] / len(self.imuTempData[port]), 6)
+        return lc
 
-    def DrawGraph(self,serPort,ld):
+    def RefreshMainWin(self, serPort, ld):
+        # 刷新状态栏
         pass
 
-    def get_time_stamp(self):
-        ct = time.time()
-        local_time = time.localtime(ct)
-        data_head = time.strftime("%Y-%m-%d %H:%M:%S", local_time)
-        data_secs = (ct - int(ct)) * 1000
-        time_stamp = "%s.%03d" % (data_head, data_secs)
+        # 刷新 tabpage
+        if serPort not in self.tab_pageDict:
+            return
+        self.tab_pageDict[serPort].Refresh(ld)
 
-        return ct, time_stamp
 
 
 

@@ -6,15 +6,15 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>608</width>
-    <height>341</height>
+    <width>750</width>
+    <height>427</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>MainWindow</string>
   </property>
   <widget class="QWidget" name="centralwidget">
-   <layout class="QGridLayout" name="gridLayout" columnstretch="0,0,0" columnminimumwidth="100,100,0">
+   <layout class="QGridLayout" name="gridLayout" columnstretch="0,0,0" rowminimumheight="0,0,0" columnminimumwidth="140,140,480">
     <item row="0" column="0" colspan="2">
      <widget class="QTextEdit_AppendEnable" name="textEdit">
       <property name="font">
@@ -27,17 +27,14 @@
       </property>
      </widget>
     </item>
-    <item row="0" column="2" rowspan="2">
-     <widget class="QFrame" name="frame">
-      <property name="frameShape">
-       <enum>QFrame::StyledPanel</enum>
-      </property>
-      <property name="frameShadow">
-       <enum>QFrame::Raised</enum>
+    <item row="1" column="1" rowspan="2">
+     <widget class="QPushButton" name="btn_clear">
+      <property name="text">
+       <string>清空</string>
       </property>
      </widget>
     </item>
-    <item row="1" column="0">
+    <item row="2" column="0">
      <widget class="QPushButton" name="btn_stop">
       <property name="text">
        <string>暂停</string>
@@ -50,12 +47,8 @@
       </property>
      </widget>
     </item>
-    <item row="1" column="1">
-     <widget class="QPushButton" name="btn_clear">
-      <property name="text">
-       <string>清空</string>
-      </property>
-     </widget>
+    <item row="0" column="2" rowspan="3">
+     <widget class="MyFigure_Inc" name="widget" native="true"/>
     </item>
    </layout>
   </widget>
@@ -65,6 +58,12 @@
    <class>QTextEdit_AppendEnable</class>
    <extends>QTextEdit</extends>
    <header>MyWidgets</header>
+  </customwidget>
+  <customwidget>
+   <class>MyFigure_Inc</class>
+   <extends>QWidget</extends>
+   <header>MyWidgets</header>
+   <container>1</container>
   </customwidget>
  </customwidgets>
  <resources/>
