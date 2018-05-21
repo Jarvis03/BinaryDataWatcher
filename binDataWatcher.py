@@ -2,6 +2,7 @@
 
 from PyQt5 import QtCore, QtWidgets
 from PyQt5.QtWidgets import QMessageBox, QSizePolicy
+from PyQt5.QtCore import QTimer
 
 
 
@@ -104,6 +105,7 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
         self.saveflagDict = { }
 
         # 文件
+        self.txtfileDayDict = { }      # 当前文件时间
         self.txtfileDict = { }
         self.rawfileDict = { }
 
@@ -112,13 +114,14 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
         if not os.path.exists('data'):
             os.makedirs('data')
 
+
     def InitWorkmodel(self,model):
         if model == 1:  # imu, len = 48 fre=10 HZ
             self.serTimeout = 1.1
             self.serFre = 10
             self.serPackLen = 48
             self.serPackFrm = '<ccccHHHiiiiiihhhhhhBc'
-            self.fileTitle = '[time, gyro_dx, gyro_dy, gyro_dz, aac_dx, acc_dy, acc_tz, gyro_tx, gyro_ty, gyro_tz, aaa_tx, acc_ty, acc_tz, ' \
+            self.fileTitle = '[time, frameID, gyro_dx, gyro_dy, gyro_dz, aac_dx, acc_dy, acc_dz, gyro_tx, gyro_ty, gyro_tz, aaa_tx, acc_ty, acc_tz, ' \
                              'gyro_dxAvg, gyro_dyAvg, gyro_dzAvg, acc_dxAvg, acc_dxAvg, acc_dzAvg]'
         elif model == 2:  # inclinometer,len = 8, fre = 5 HZ
             self.serTimeout = 1.2
@@ -167,7 +170,10 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
                     self.imuTempData[cfg[0]] = list()
 
                     # 创建文件
-                    fnamet =  'data\\' + cfg[0] + '_Data_' + time.strftime("%Y%m%d%H%M%S", time.localtime()) + '.txt'
+                    tf = int(time.time())
+                    self.txtfileDayDict[cfg[0]] = int(tf/86400)
+                    fnamet =  'data\\' + cfg[0] + '_Data_' + time.strftime("%Y%m%d%H%M%S", time.localtime(tf)) + '.txt'
+
                     self.txtfileDict[cfg[0]] = open(fnamet, 'w')
                     self.txtfileDict[cfg[0]].write(self.fileTitle+'\r\n')
                     fnamer = 'data\\' + cfg[0] + '_Data_' + time.strftime("%Y%m%d%H%M%S", time.localtime()) + '.raw'
@@ -183,6 +189,7 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
                     self.threadDict[cfg[0]] = th
                     self.thRcvFlagDict[cfg[0]] = True
                     self.threadDict[cfg[0]].start()
+
                 else:
                     bQuit = True
             except serial.SerialException as serE:
@@ -337,7 +344,7 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
     def Thread_GetData(self):
         try:
             while self.thGetFlag:
-                for p in self.serDict:
+                for p in self.dataQueue:
                     data = list()
                     while True:
                         try:
@@ -368,6 +375,7 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
                 if bindata[index+self.serPackLen-1] == b'\xFF':
                     index += 1
                     continue
+
                 # 解码
                 pack = ()
                 pack = struct.unpack('>chhhc', bindata[index:index + self.serPackLen])
@@ -380,9 +388,14 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
                 self.dataQueue[port].put(lpack)
 
                 # 解码后的数据存文件
-                if int(t+28800) % 86400 == 0:
+                day = int(t/86400)
+                if day != self.txtfileDayDict[port]:
                     self.txtfileDict[port].close()
-                    self.txtfileDict[port] = open('data\\' + port + '_Data_' + time.strftime("%Y%m%d%H%M%S", time.localtime()) + '.txt', 'w')
+
+                    self.txtfileDayDict[port] = day
+                    fname = 'data\\' + port + '_Data_' + time.strftime("%Y%m%d%H%M%S", time.localtime(t)) + '.txt'
+
+                    self.txtfileDict[port] = open(fname, 'w')
                 if self.saveflagDict[port] == True:
                     self.txtfileDict[port].writelines(wpack+'\n')
                 index += self.serPackLen
@@ -424,7 +437,7 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
 
                 lpack = list()
                 # lpack 内容
-                # time, gyro_dx, gyro_dy, gyro_dz, aac_dx, acc_dy, acc_z, gyro_tx, gyro_ty, gyro_tz, aaa_tx, acc_ty, acc_tz
+                # time, frameID, gyro_dx, gyro_dy, gyro_dz, aac_dx, acc_dy, acc_z, gyro_tx, gyro_ty, gyro_tz, aaa_tx, acc_ty, acc_tz
                 lpack.append(pack[6])
                 for i in range(6):
                     lpack.append(round(pack[7 + i] * 1e-5, 8))
@@ -435,13 +448,13 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
 
                 # 加入解码完成的队列
                 self.dataQueue[port].put(lpack)
-                print(lpack)
+                #print(lpack)
 
-                # 写入缓存数据李彪
+                # 写入缓存数据
                 self.imuTempData[port].append(lpack)
 
-                # 是否需要写文件（100s一次）
-                if self.imuTempData[port][-1][1] % 100 == 0:
+                # 是否需要写文件（1000一次）
+                if self.imuTempData[port][-1][1] % 1000 == 0:
                     lavg = self.calculateAverage(port)
 
                     # 写文件
@@ -473,12 +486,8 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
         pass
 
         # 刷新 tabpage
-        if serPort not in self.tab_pageDict:
-            return
-        self.tab_pageDict[serPort].Refresh(ld)
-
-
-
+        if serPort in self.tab_pageDict:
+            self.tab_pageDict[serPort].Refresh(ld)
 
 
 
