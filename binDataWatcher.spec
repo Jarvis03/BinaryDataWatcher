@@ -3,8 +3,8 @@
 block_cipher = None
 
 
-a = Analysis(['inclinometerWatcher.py'],
-             pathex=['D:\\inclinometerWatcher'],
+a = Analysis(['binDataWatcher.py'],
+             pathex=['D:\\BinaryDataWatcher'],
              binaries=[],
              datas=[],
              hiddenimports=[],
@@ -21,7 +21,7 @@ exe = EXE(pyz,
           a.binaries,
           a.zipfiles,
           a.datas,
-          name='inclinometerWatcher',
+          name='binDataWatcher',
           debug=False,
           strip=False,
           upx=True,

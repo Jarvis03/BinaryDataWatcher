@@ -2,7 +2,7 @@ import sys
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtWidgets import QSizePolicy, QVBoxLayout, QLineEdit, QMessageBox
-from PyQt5.QtCore import QTimer
+from PyQt5.QtCore import QTimer, QThread
 
 import serial
 import serial.tools.list_ports
@@ -13,8 +13,11 @@ matplotlib.use('Qt5Agg')
 import  numpy as np
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5 import NavigationToolbar2QT as NavigationToolbar
+from matplotlib.animation import FuncAnimation
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+
 
 import time
 
@@ -25,6 +28,15 @@ def get_time_stamp(ct):
     data_secs = (ct - int(ct)) * 1000
     time_stamp = "%s.%03d" % (data_head, data_secs)
     return time_stamp
+
+class DrawPlotThread(QThread):
+
+    def __init__(self, rest, parent=None):
+        super().__init__(parent)
+        self._rest = rest
+
+    def run(self):
+        pass
 
 class MyFigureCanvas(QtWidgets.QWidget):
     def __init__(self, parent=None):
@@ -79,27 +91,86 @@ class MyFigure_Inc(MyFigureCanvas):
         self.canvas.draw()
 
 class MyFigure_Imu(MyFigureCanvas):
+    finished = QtCore.pyqtSignal()
     def __init__(self, parent=None):
         super().__init__(parent)
 
+        self.xleft = 0
+
+        # self.luserList = list()
+        # self.bgList = list()
+
         self .axList = list()
         title = ['gyro_dx', 'gyro_dy', 'gyro_dz', 'acc_dx', 'acc_dy', 'acc_dz']
+        self.figure.set_constrained_layout(True)
+        self.figure.set_constrained_layout_pads(w_pad=0.4, h_pad=0.2, hspace=0.1, wspace=0.05)
         for a in range(6):
-            ax = self.figure.add_subplot(2,3,a+1)
+            ax = self.figure.add_subplot(2, 3, a+1)
+
             ax.grid(True)
             ax.set_title(title[a], fontsize=11)
+            ax.set_xlabel('帧计数')
+            ax.set_ylabel('器件读数（标注单位）')
+
+            ax.set_autoscale_on(True)
             self.axList.append(ax)
+
+        self.canvas.draw()
+
+        # for ax in self.axList:
+        #     self.bgList.append(self.canvas.copy_from_bbox(ax.bbox))
+
+        self.timerC = QTimer(self)
+        self.timerC.timeout.connect(self.TimerDraw)
+        self.timerC.start(1000)
+
+    def TimerDraw(self):
+        self.canvas.draw()
+        pass
 
     def myDraw(self, ld):
         try:
+            if not ld:
+                return
+            # if ld[-1][1] > self.xleft+600:
+            #     self.xleft = ld[-1][1]
+            #     for ax in self.axList:
+            #         ax.set_xlim(self.xleft, self.xleft+600)
+
             nd = np.array(ld)
+
             for i in range(len(self.axList)):
-                if self.axList[i].lines:
-                    self.axList[i].lines.pop(0)
-                self.axList[i].plot(nd[:, 1], nd[:, i+3], color='r')
-            self.canvas.draw()
+                if i<3:
+                    color = 'b'
+                else:
+                    color = 'g'
+
+                # self.canvas.restore_region(self.bgList[i])
+                # if not self.axList[i].lines:
+                #     self.axList[i].plot(nd[:, 1], nd[:, i + 2], color=color)
+                # else:
+                #     self.axList[i].lines[0].set_data(nd[:, 1], nd[:, i+2])
+                # self.axList[i].draw_artist(self.axList[i].lines[0])
+                #
+                # self.canvas.blit(self.axList[i].bbox)
+                #
+                # self.axList[i].set_xlim(self.xleft, self.xleft + 600)
+
+                while self.axList[i].lines:
+                    del self.axList[i].lines[0]
+                self.axList[i].plot(nd[:, 1], nd[:, i+2], color=color)
+                #self.axList[i].draw_artist(self.axList[i].lines[0])
+
+                # bom,top = self.axList[i].get_ylim()
+                # vline = self.axList[i].vlines(nd[-1,1], bom, nd[-1,i+2], linestyles='dotted', color='r')
+                # self.axList[i].add_line(vline)
+            #self.canvas.draw()
         except Exception as err:
             QMessageBox.information(self, "PorcessInclinometer", str(err), QMessageBox.Ok)
+
+    def resetFigure(self):
+        pass
+
 
 
 class QComboBox_SelSerialNum(QtWidgets.QComboBox):
@@ -184,12 +255,12 @@ class tabPage_Inclinometer(QtWidgets.QWidget):
 class tabPage_Imu(QtWidgets.QWidget):
     sinOnDraw = QtCore.pyqtSignal(list)
 
+
     def __init__(self,parent=None):
         super().__init__(parent)
 
         self.tableRowCount = 300
         self.tableColCount = 14
-        self.avgCount = 100
 
         self.verticalLayout = QtWidgets.QVBoxLayout(self)
         self.verticalLayout.setObjectName("verticalLayout")
@@ -341,7 +412,7 @@ class tabPage_Imu(QtWidgets.QWidget):
         item = self.tableWidget.horizontalHeaderItem(3)
         item.setText( "gyro_dy")
         item = self.tableWidget.horizontalHeaderItem(4)
-        item.setText( "gyro_zx")
+        item.setText( "gyro_dz")
         item = self.tableWidget.horizontalHeaderItem(5)
         item.setText( "acc_dx")
         item = self.tableWidget.horizontalHeaderItem(6)
@@ -397,26 +468,29 @@ class tabPage_Imu(QtWidgets.QWidget):
         self.tableWidget_2.setSortingEnabled(False)
 
         self.btn_reset.setText("复位")
-        self.btn_Pause.setText("表格暂停")
+        self.btn_Pause.setText("暂停")
 
         self.label_starttime.setText("端口启动时间：" + time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
         self.label_duration.setText("运行时长：0")
         self.label_frameCount.setText("接收数据总帧数：0")
 
+        self.avgCount = 1000    # 平均值个数
+
         self.tDuration = 0
         self.frameCount = 0
 
         self.drawData = list()
+        self.lastData = list()
         self.tableData = list()     # 用于表格显示的实时数据
 
-        self.totalAll = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        self.sumAll = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         self.avgAll = [0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]        # 用于表格显示的统计数据
 
-        self.total100 = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        self.avg100 = list()                              # 用于表格显示的统计数据
+        self.sumDuration = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        self.avgDuartion = list()                              # 用于表格显示的统计数据
 
-        self.refreshFlag = True     # 刷新页面的标志
-        self.pauseFlag = False      # 暂停刷新表格的标志
+        self.refreshFlag = True     # 刷新页面的标志（为false时：数据不更新，显示不更新）
+        self.pauseFlag = False      # 暂停刷新标志（为true时：数据更新，计时更新，图、表不更新）
 
         self.timerC = QTimer(self)
         self.timerC.timeout.connect(self.TimerFrameCount)
@@ -440,17 +514,18 @@ class tabPage_Imu(QtWidgets.QWidget):
 
         # 表格复位
         self.tableData.clear()
-        self.totalAll.clear()
-        self.totalAll = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        self.sumAll.clear()
+        self.sumAll = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         self.avgAll = [0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        self.total100 = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        self.avg100.clear()
+        self.sumDuration = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        self.avgDuartion.clear()
 
         self.tableWidget.clearContents()
         self.tableWidget_2.clearContents()
 
         # 图像复位
         self.drawData.clear()
+        self.widget.resetFigure()
 
         # 开始刷新
         self.timerC.start(1000)
@@ -462,7 +537,7 @@ class tabPage_Imu(QtWidgets.QWidget):
             self.btn_Pause.setText('继续')
         else:
             self.pauseFlag = False
-            self.btn_Pause.setText('表格暂停')
+            self.btn_Pause.setText('暂停')
 
     def TimerFrameCount(self):
         self.tDuration += 1
@@ -476,32 +551,35 @@ class tabPage_Imu(QtWidgets.QWidget):
             for d in ld:
                 # 缓存绘图需要的数据
                 self.drawData.append(d)
+                if len(self.drawData) > 1800:
+                    del self.drawData[0]
+
                 self.frameCount += 1    # 可能需要加锁
 
                 # 统计数据
-                if d[1]%self.avgCount == 0:  # 1000包数据
-                    # 求100s平均
+                if d[1]%self.avgCount == 0:  # 10000包数据
+
                     avg = list()
                     avg.append(d[1]-1)
 
                     for i in range(6):
-                        avg.append(self.total100[i]/self.avgCount)
+                        avg.append(self.sumDuration[i]/self.avgCount)
 
-                    self.avg100.append(avg)
-                    if len(self.avg100) > 6:
-                        del self.avg100[0]
+                    self.avgDuartion.append(avg)
+                    if len(self.avgDuartion) > 6:
+                        del self.avgDuartion[0]
 
                     # 重新开始计算和值
-                    self.total100 = d[2:8].copy()
+                    self.sumDuration = d[2:8].copy()
                 else:
                     for i in range(6):
-                        self.total100[i] += d[i+2]
+                        self.sumDuration[i] += d[i+2]
 
                 # 总平均
                 self.avgAll[0]= d[1]
                 for i in range(6):
-                    self.totalAll[i] += d[i+2]
-                    self.avgAll[i+1] = self.totalAll[i] /self.frameCount
+                    self.sumAll[i] += d[i+2]
+                    self.avgAll[i+1] = self.sumAll[i] /self.frameCount
 
                # 实时数据
                 self.tableData.append(d)
@@ -522,13 +600,17 @@ class tabPage_Imu(QtWidgets.QWidget):
                     newItem = QtWidgets.QTableWidgetItem(str(self.avgAll[col]))
                     self.tableWidget_2.setItem(0, col, newItem)
 
-                for row in range(len(self.avg100)):
-                    for col in range(len(self.avg100[row])):
-                        newItem = QtWidgets.QTableWidgetItem(str(self.avg100[row][col]))
+                for row in range(len(self.avgDuartion)):
+                    for col in range(len(self.avgDuartion[row])):
+                        newItem = QtWidgets.QTableWidgetItem(str(self.avgDuartion[row][col]))
                         self.tableWidget_2.setItem(row+1, col, newItem)
 
             # 发送绘图信号
-            if self.drawData:
+            if not self.pauseFlag and self.drawData:
                 self.sinOnDraw.emit(self.drawData)
+                pass
+
+
+
         except Exception as err:
             QMessageBox.information(self, "PorcessInclinometer", str(err), QMessageBox.Ok)
