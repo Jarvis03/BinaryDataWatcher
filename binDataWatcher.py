@@ -85,7 +85,6 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
 
         # 菜单 COM1 action
         self.actCloseDict = { }
-        self.actShowDict = { }
         self.actSaveDict = { }
 
         # table_page
@@ -95,20 +94,9 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
         self.threadDict = { }
         self.thRcvFlagDict = { }
 
-        # 显示线程
-        self.thGetData = threading.Thread()
-        self.thGetFlag = False
-
-        # 数据，和，均值
-        self.imuTempData = { }
-        self.imuAvgData = { }
-        self.imuSumData = { }
-
-        # 是否存储
-        self.saveflagDict = { }
-
         # 文件
-        self.txtfileDayDict = { }      # 当前文件时间(天)
+        self.saveflagDict = {}
+        self.txtfileDayDict = { }   # 当前txt文件的创建时间(天)
         self.txtfileDict = { }
         self.rawfileDict = { }
 
@@ -124,8 +112,7 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
             self.serFre = 10
             self.serPackLen = 48
             self.serPackFrm = '<ccccHHHiiiiiihhhhhhBc'
-            self.fileTitle = '[time, frameID, gyro_dx, gyro_dy, gyro_dz, aac_dx, acc_dy, acc_dz, gyro_tx, gyro_ty, gyro_tz, aaa_tx, acc_ty, acc_tz, ' \
-                             'gyro_dxAvg, gyro_dyAvg, gyro_dzAvg, acc_dxAvg, acc_dxAvg, acc_dzAvg]'
+            self.fileTitle = '[time, frameID, gyro_dx, gyro_dy, gyro_dz, aac_dx, acc_dy, acc_dz, gyro_tx, gyro_ty, gyro_tz, aaa_tx, acc_ty, acc_tz]'
         elif model == 2:  # inclinometer,len = 8, fre = 5 HZ
             self.serTimeout = 1.2
             self.serFre = 5
@@ -138,88 +125,93 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
     def closeEvent(self, event):
         try:
             if self.serDict:
-                QMessageBox.information(self, "closeEvent", str('请先关闭串口'), QMessageBox.Ok)
-                event.ignore()
-                return
-
+                reply = QMessageBox.question(self, '退出程序','数据仍在接收，是否退出？', QMessageBox.Yes, QMessageBox.No)
+                if reply == QMessageBox.Yes:    # 退出
+                    event.accept()
+                    for port in self.serDict:
+                        self.CloseSerial(port)
+                else:
+                    event.ignore()
         except Exception as err:
             QMessageBox.information(self, "closeEvent", str(err), QMessageBox.Ok)
 
     def OpenSerial(self):
-        bQuit = True
-        if self.serCfgDlg.exec() :
-            cfg = self.serCfgDlg.GetCfg()
-            try:
+        try:
+            if self.serCfgDlg.exec() :
+                cfg = self.serCfgDlg.GetCfg()
                 ser = serial.Serial(*cfg)
                 if ser.isOpen():
                     self.serDict[cfg[0]] = ser
+
+                    # 菜单
                     self.AddSerialMenu(cfg[0])
 
-                    # 缓存imu数据（100s*0HZ）
-                    self.imuTempData[cfg[0]] = list()
+                    # page
+                    page = self.NewTabPage(self.workmodel, cfg[0])
+                    if page:
+                        self.tab_pageDict[cfg[0]] = page
+                        self.tabWidget.addTab(page, cfg[0])
 
-                    # 创建文件
+                    # file
                     tf = int(time.time())
                     self.txtfileDayDict[cfg[0]] = int(tf/86400)
-                    fnamet =  'data\\' + cfg[0] + '_Data_' + time.strftime("%Y%m%d%H%M%S", time.localtime(tf)) + '.txt'
 
-                    self.txtfileDict[cfg[0]] = open(fnamet, 'w')
+                    fnametxt =  'data\\' + cfg[0] + '_Data_' + time.strftime("%Y%m%d%H%M%S", time.localtime(tf)) + '.txt'
+                    self.txtfileDict[cfg[0]] = open(fnametxt, 'w')
                     self.txtfileDict[cfg[0]].write(self.fileTitle+'\r\n')
-                    fnamer = 'data\\' + cfg[0] + '_Data_' + time.strftime("%Y%m%d%H%M%S", time.localtime()) + '.raw'
-                    self.rawfileDict[cfg[0]] = open(fnamer, 'wb')
 
-                    th = threading.Thread(target=self.Thread_RecvDataFormSerial, args=(cfg[0],), name=cfg[0])
-                    self.threadDict[cfg[0]] = th
+                    fnameraw = 'data\\' + cfg[0] + '_Data_' + time.strftime("%Y%m%d%H%M%S", time.localtime()) + '.raw'
+                    self.rawfileDict[cfg[0]] = open(fnameraw, 'wb')
+
+                    #thread recv
+                    self.threadDict[cfg[0]] = threading.Thread(target=self.Thread_RecvDataFormSerial, args=(cfg[0],), name=cfg[0])
                     self.thRcvFlagDict[cfg[0]] = True
                     self.threadDict[cfg[0]].start()
-
                 else:
-                    bQuit = True
-            except serial.SerialException as serE:
-                QMessageBox.information(self, "打开串口失败", str(serE), QMessageBox.Ok)
-                bQuit = False
-            except IOError as ioE:
-                QMessageBox.information(self, "创建文件失败", str(ioE), QMessageBox.Ok)
-                self.serDict[cfg[0]].close()
-            except Exception as err:
-                QMessageBox.information(self, "OpenSerial", str(err), QMessageBox.Ok)
-                return
-        if not bQuit:
+                    self.OpenSerial()
+        except serial.SerialException as serE:
+            QMessageBox.information(self, "打开串口失败", str(serE), QMessageBox.Ok)
             self.OpenSerial()
+        except IOError as ioE:
+            QMessageBox.information(self, "创建文件失败", str(ioE), QMessageBox.Ok)
+            self.serDict[cfg[0]].close()
+            self.OpenSerial()
+        except Exception as err:
+            QMessageBox.information(self, "打开串口异常", str(err), QMessageBox.Ok)
+
 
     def CloseSerial(self, serPort):
         try:
             if self.serDict[serPort].isOpen():
-                # 停止接收
+
                 self.thRcvFlagDict[serPort] = False
                 self.threadDict[serPort].join()
                 del self.thRcvFlagDict[serPort]
                 del self.threadDict[serPort]
-                # 关闭串口
+
                 self.serDict[serPort].close()
                 del self.serDict[serPort]
 
-                # 关闭文件
-                if self.workmodel == 1:
-                    lavg = self.calculateAverage(self.imuTempData[serPort])
-                    for l in self.imuTempData[serPort]:
-                        self.txtfileDict[serPort].writelines(str(l + lavg) + '\n')
-
-                time.sleep(0.1)  # 等待缓存的数据写入（文件和控件）
                 self.txtfileDict[serPort].close()
                 self.rawfileDict[serPort].close()
+
                 del self.txtfileDict[serPort]
                 del self.rawfileDict[serPort]
                 del self.saveflagDict[serPort]
+                del self.txtfileDayDict[serPort]
 
                 self.DelSerialMenu(serPort)
+
+                self.tab_pageDict[serPort].deleteLater()
+                del self.tab_pageDict[serPort]
+
         except serial.SerialException as e:
             QMessageBox.information(self, "关闭串口失败", str(e), QMessageBox.Ok)
         except Exception as err:
             QMessageBox.information(self, "CloseSerial", str(err), QMessageBox.Ok)
 
     def AddSerialMenu(self,serPort):
-        # close
+
         action1 = QtWidgets.QAction(self)
         action1.setObjectName("Close" + serPort)
         self.actCloseDict[serPort] = action1
@@ -227,15 +219,6 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
         self.menu_connect.addAction(action1)
         action1.triggered.connect(lambda:self.CloseSerial(serPort))
 
-        # show
-        action2 = QtWidgets.QAction(self)
-        action2.setObjectName("Show" + serPort)
-        self.actShowDict[serPort] = action2
-        action2.setText("Show " + serPort)
-        self.menu_show.addAction(action2)
-        action2.triggered.connect(lambda: self.ShowSerial(serPort))
-
-        # Save
         action3 = QtWidgets.QAction(self)
         action3.setObjectName("Save" + serPort)
         action3.setCheckable(True)
@@ -246,32 +229,16 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
         self.menu_save.addAction(action3)
         action3.triggered.connect(lambda :self.SaveSerial(action3.isChecked(),serPort))
 
-        # tabWidget
-        page = self.NewTabPage(self.workmodel, serPort)
-        if page:
-            self.tab_pageDict[serPort] = page
-            self.tabWidget.addTab(page, serPort)
-
     def DelSerialMenu(self, serPort):
         try:
-            # 删除菜单项
             self.actCloseDict[serPort].deleteLater()
             del self.actCloseDict[serPort]
-
-            self.actShowDict[serPort].deleteLater()
-            del self.actShowDict[serPort]
 
             self.actSaveDict[serPort].deleteLater()
             del self.actSaveDict[serPort]
 
-            # 删除显示页面
-            self.tab_pageDict[serPort].deleteLater()
-            del self.tab_pageDict[serPort]
         except Exception as err:
             QMessageBox.information(self, "DelSerialMenu", str(err), QMessageBox.Ok)
-
-    def ShowSerial(self,serPort):
-        pass
 
     def SaveSerial(self, checked, serPort):
         self.saveflagDict[serPort] = checked
@@ -293,31 +260,28 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
 
     def Thread_RecvDataFormSerial(self, port):
 
-        remainData = bytes()
-        serData = bytes()
         nReadbytes = self.serFre*self.serPackLen
+        remainData = bytes()
 
         ser = self.serDict[port]
         ser.timeout = self.serTimeout
         ser.flushInput()
         try:
             while self.thRcvFlagDict[port]:
-                serData = ser.read(nReadbytes)
+                serdata = ser.read(nReadbytes)
 
                 # 无数据，继续等待接收
-                if not serData:
+                if not serdata:
                     continue
 
-                # 存储原始数据
                 if self.saveflagDict[port] == True:
-                    self.rawfileDict[port].write(serData)
+                    self.rawfileDict[port].write(serdata)
 
-                # 拼包、处理
-                serData = remainData + serData
+                serdata = remainData + serdata
                 if self.workmodel == 1:
-                    remainData = self.PorcessImu(port, serData)
+                    remainData = self.PorcessImu(port, serdata)
                 elif self.workmodel == 2:
-                    remainData = self.PorcessInclinometer(port, serData)
+                    remainData = self.PorcessInclinometer(port, serdata)
                 else:
                     pass
         except serial.SerialException as serE:
@@ -331,6 +295,7 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
         try:
             index = 0
             sendData = list()
+            writData = list()
 
             while 1:
                 index = bindata.find(b'\xAA',index)
@@ -355,25 +320,29 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
 
                 # 加入时间标记
                 t = time.time()
-                ts = get_time_stamp(t)
                 lpack = [t, pack[1] / 1000, pack[2] / 1000, pack[3] / 10 ]
-                wpack = str([ts, pack[1] / 1000, pack[2] / 1000, pack[3] / 10])
-
                 sendData.append(lpack)
 
-                # 解码后的数据存文件
-                day = int(t/86400)
-                if day != self.txtfileDayDict[port]:
+                ts = get_time_stamp(t)
+                wpack = str([ts, pack[1] / 1000, pack[2] / 1000, pack[3] / 10])
+                writData.append(wpack)
+
+                index += self.serPackLen
+
+            # 解码后的数据存文件
+            if self.saveflagDict[port]:
+                day = int(sendData[0][0] / 86400)
+                if day > self.txtfileDayDict[port]:
                     self.txtfileDict[port].close()
 
                     self.txtfileDayDict[port] = day
                     fname = 'data\\' + port + '_Data_' + time.strftime("%Y%m%d%H%M%S", time.localtime(t)) + '.txt'
                     self.txtfileDict[port] = open(fname, 'w')
 
-                if self.saveflagDict[port] == True:
-                    self.txtfileDict[port].writelines(wpack+'\r\n')
+                    self.emit()
 
-                index += self.serPackLen
+                for w in writData:
+                    self.txtfileDict[port].writelines(w + '\r\n')
 
             self.sinRefresh.emit(port, sendData)
             return bytes()
@@ -414,9 +383,8 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
                 t = time.time()
                 ts = get_time_stamp(t)
 
-                # lpack 内容
                 # time, frameID, gyro_dx, gyro_dy, gyro_dz, aac_dx, acc_dy, acc_z, gyro_tx, gyro_ty, gyro_tz, aaa_tx, acc_ty, acc_tz
-                lpack = list()
+                lpack = [t]
                 lpack.append(pack[3])
                 for i in range(3):
                     lpack.append(round(pack[7 + i] * 1e-5, 8))
@@ -424,56 +392,33 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
                     lpack.append(round(pack[10 + i] * 1e-7, 8))
                 for i in range(6):
                     lpack.append(round(pack[13 + i] * 0.1, 1))
-
-                lpack.insert(0, t)
                 #print(lpack)
 
-                # 加入解码完成的队列
                 sendData.append(lpack)
-
-                # 写入缓存数据
-                self.imuTempData[port].append(lpack)
-
-                # 是否需要写文件（1000包一次）
-                if self.imuTempData[port][-1][1] % 1000 == 0:
-                    lavg = self.calculateAverage(self.imuTempData[port])
-
-                    # 写文件
-                    for l in self.imuTempData[port]:
-                        self.txtfileDict[port].writelines(str(l + lavg) + '\n')
-                        # for d in l+lavg:
-                        #     self.textfile
-
-                    # 清空缓存数据
-                    self.imuTempData[port] = list()
 
                 # 更新index
                 index += self.serPackLen
 
+            if self.saveflagDict[port]:
+                for l in sendData:
+                    self.txtfileDict[port].writelines(str(l) + '\n')
+
             self.sinRefresh.emit(port, sendData)
+
             return bytes()
         except Exception as err:
-            QMessageBox.information(self, "PorcessInclinometer", str(err), QMessageBox.Ok)
-
-    def calculateAverage(self, data):
-        # 计算当前所有已解析数据的均值
-        lc = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        if not data:
-            return lc
-        for l in data:
-            for i in range(6):
-                lc[i] += l[i + 2]
-        for l in range(6):
-            lc[l] = round(lc[l] / len(data), 6)
-        return lc
+            QMessageBox.information(self, "PorcessImu", str(err), QMessageBox.Ok)
 
     def RefreshMainWin(self, serPort, ld):
-        # 刷新状态栏
-        pass
-
-        # 刷新 tabpage
         if serPort in self.tab_pageDict:
             self.tab_pageDict[serPort].Refresh(ld)
+
+        # 加入刷新状态栏
+        pass
+
+    def reset_figure(self,serPort):
+        if serPort in self.tab_pageDict:
+            self.tab_pageDict[serPort].rest
 
 
 if __name__ == "__main__":
