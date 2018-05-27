@@ -72,6 +72,16 @@ class MyFigure_Inc(MyFigureCanvas):
         self.axes.grid(True)
         self.axes.set_title("倾斜仪读数显示", fontsize=11)
 
+        self.axex.set_autoscale_on(True)
+
+        self.timerC = QTimer(self)
+        self.timerC.timeout.connect(self.TimerDraw)
+        self.timerC.start(1000)
+
+    def TimerDraw(self):
+        self.canvas.draw()
+        pass
+
     def myDraw(self, ld):
         self.axes.clear()
         for d in ld:
@@ -87,8 +97,8 @@ class MyFigure_Inc(MyFigureCanvas):
         self.line_x = self.axes.plot(self.t, self.x, label='X 方向倾角', color='r')
         self.line_y = self.axes.plot(self.t, self.y, label='Y 方向倾角', color='g')
 
-        self.axes.legend(loc='best', fontsize=9)
-        self.canvas.draw()
+
+
 
 class MyFigure_Imu(MyFigureCanvas):
     finished = QtCore.pyqtSignal()
@@ -132,10 +142,10 @@ class MyFigure_Imu(MyFigureCanvas):
         try:
             if not ld:
                 return
-            # if ld[-1][1] > self.xleft+600:
-            #     self.xleft = ld[-1][1]
-            #     for ax in self.axList:
-            #         ax.set_xlim(self.xleft, self.xleft+600)
+            if ld[-1][1] > self.xleft+600:
+                self.xleft = ld[-1][1]
+                for ax in self.axList:
+                    ax.set_xlim(self.xleft, self.xleft+600)
 
             nd = np.array(ld)
 
@@ -170,8 +180,6 @@ class MyFigure_Imu(MyFigureCanvas):
 
     def resetFigure(self):
         pass
-
-
 
 class QComboBox_SelSerialNum(QtWidgets.QComboBox):
     def __init__(self, parent=None):

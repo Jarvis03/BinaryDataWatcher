@@ -99,9 +99,6 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
         self.thGetData = threading.Thread()
         self.thGetFlag = False
 
-        # # 数据（解码->处理显示）的队列
-        # self.dataQueue = { }
-
         # 数据，和，均值
         self.imuTempData = { }
         self.imuAvgData = { }
@@ -111,7 +108,7 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
         self.saveflagDict = { }
 
         # 文件
-        self.txtfileDayDict = { }      # 当前文件时间
+        self.txtfileDayDict = { }      # 当前文件时间(天)
         self.txtfileDict = { }
         self.rawfileDict = { }
 
@@ -158,14 +155,8 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
                     self.serDict[cfg[0]] = ser
                     self.AddSerialMenu(cfg[0])
 
-                    # # 创建数据
-                    # self.dataQueue[cfg[0]] = queue.Queue(100)
-
                     # 缓存imu数据（100s*0HZ）
                     self.imuTempData[cfg[0]] = list()
-                    # lc = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-                    # self.imuAvgData[cfg[0]] = lc
-                    # self.imuSumData[cfg[0]] = lc
 
                     # 创建文件
                     tf = int(time.time())
@@ -176,12 +167,6 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
                     self.txtfileDict[cfg[0]].write(self.fileTitle+'\r\n')
                     fnamer = 'data\\' + cfg[0] + '_Data_' + time.strftime("%Y%m%d%H%M%S", time.localtime()) + '.raw'
                     self.rawfileDict[cfg[0]] = open(fnamer, 'wb')
-
-                    # # 创建线程
-                    # if not self.thGetFlag:
-                    #     self.thGetData = threading.Thread(target=self.Thread_GetData)
-                    #     self.thGetFlag = True
-                    #     self.thGetData.start()
 
                     th = threading.Thread(target=self.Thread_RecvDataFormSerial, args=(cfg[0],), name=cfg[0])
                     self.threadDict[cfg[0]] = th
@@ -213,9 +198,6 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
                 # 关闭串口
                 self.serDict[serPort].close()
                 del self.serDict[serPort]
-                # if not self.serDict:
-                #     self.thGetFlag = False
-                #     self.thGetData.join()
 
                 # 关闭文件
                 if self.workmodel == 1:
@@ -229,7 +211,6 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
                 del self.txtfileDict[serPort]
                 del self.rawfileDict[serPort]
                 del self.saveflagDict[serPort]
-                # del self.dataQueue[serPort]
 
                 self.DelSerialMenu(serPort)
         except serial.SerialException as e:
@@ -346,26 +327,11 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
         except Exception as err:
             QMessageBox.information(self, "Thread_RecvDataFormSerial", str(err), QMessageBox.Ok)
 
-    # def Thread_GetData(self):
-    #     try:
-    #         pass
-    #         while self.thGetFlag:
-    #             for p in self.dataQueue:
-    #                 data = list()
-    #                 while True:
-    #                     try:
-    #                         data.append(self.dataQueue[p].get_nowait())
-    #                     except queue.Empty:
-    #                         break
-    #                 # 实时显示
-    #                 self.sinRefresh.emit(p, data)
-    #             time.sleep(1)
-    #     except Exception as err:
-    #         QMessageBox.information(self, "Thread_GetData", str(err), QMessageBox.Ok)
-
     def PorcessInclinometer(self, port, bindata):
         try:
             index = 0
+            sendData = list()
+
             while 1:
                 index = bindata.find(b'\xAA',index)
 
@@ -380,6 +346,7 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
                 # 结尾错误
                 if bindata[index+self.serPackLen-1] == b'\xFF':
                     index += 1
+                    self.txtfileDict[port].writelines('数据结尾错误！\r\n')
                     continue
 
                 # 解码
@@ -391,7 +358,8 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
                 ts = get_time_stamp(t)
                 lpack = [t, pack[1] / 1000, pack[2] / 1000, pack[3] / 10 ]
                 wpack = str([ts, pack[1] / 1000, pack[2] / 1000, pack[3] / 10])
-                # self.dataQueue[port].put(lpack)
+
+                sendData.append(lpack)
 
                 # 解码后的数据存文件
                 day = int(t/86400)
@@ -403,9 +371,11 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
                     self.txtfileDict[port] = open(fname, 'w')
 
                 if self.saveflagDict[port] == True:
-                    self.txtfileDict[port].writelines(wpack+'\n')
+                    self.txtfileDict[port].writelines(wpack+'\r\n')
 
                 index += self.serPackLen
+
+            self.sinRefresh.emit(port, sendData)
             return bytes()
         except Exception as err:
             QMessageBox.information(self, "PorcessInclinometer", str(err), QMessageBox.Ok)
@@ -447,9 +417,11 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
                 # lpack 内容
                 # time, frameID, gyro_dx, gyro_dy, gyro_dz, aac_dx, acc_dy, acc_z, gyro_tx, gyro_ty, gyro_tz, aaa_tx, acc_ty, acc_tz
                 lpack = list()
-                lpack.append(pack[6])
-                for i in range(6):
+                lpack.append(pack[3])
+                for i in range(3):
                     lpack.append(round(pack[7 + i] * 1e-5, 8))
+                for i in range(3):
+                    lpack.append(round(pack[10 + i] * 1e-7, 8))
                 for i in range(6):
                     lpack.append(round(pack[13 + i] * 0.1, 1))
 
@@ -457,7 +429,6 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
                 #print(lpack)
 
                 # 加入解码完成的队列
-                #self.dataQueue[port].put(lpack)
                 sendData.append(lpack)
 
                 # 写入缓存数据
@@ -470,6 +441,8 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
                     # 写文件
                     for l in self.imuTempData[port]:
                         self.txtfileDict[port].writelines(str(l + lavg) + '\n')
+                        # for d in l+lavg:
+                        #     self.textfile
 
                     # 清空缓存数据
                     self.imuTempData[port] = list()
@@ -485,6 +458,8 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
     def calculateAverage(self, data):
         # 计算当前所有已解析数据的均值
         lc = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        if not data:
+            return lc
         for l in data:
             for i in range(6):
                 lc[i] += l[i + 2]
