@@ -15,14 +15,13 @@ import threading
 import time
 import queue
 
+from MyWidgets import get_time_stamp
+
 from mainWin import Ui_MainWindow
 from SerialCfg import Ui_Dialog_SerialCfg
 from SelModelDlg import Ui_SelModel
-
-from MyWidgets import tabPage_Inclinometer
-from MyWidgets import tabPage_Imu
-from MyWidgets import get_time_stamp
-
+from tabPageInc import tabPage_Inclinometer
+from tabPageImu import tabPage_Imu
 
 
 
@@ -128,8 +127,11 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
                 reply = QMessageBox.question(self, '退出程序','数据仍在接收，是否退出？', QMessageBox.Yes, QMessageBox.No)
                 if reply == QMessageBox.Yes:    # 退出
                     event.accept()
+                    portl = list()
                     for port in self.serDict:
-                        self.CloseSerial(port)
+                        portl.append(port)
+                    for p in portl:
+                        self.CloseSerial(p)
                 else:
                     event.ignore()
         except Exception as err:
@@ -170,14 +172,14 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
                 else:
                     self.OpenSerial()
         except serial.SerialException as serE:
-            QMessageBox.information(self, "打开串口失败", str(serE), QMessageBox.Ok)
+            QMessageBox.information(self, "OpenSerial", str(serE), QMessageBox.Ok)
             self.OpenSerial()
         except IOError as ioE:
-            QMessageBox.information(self, "创建文件失败", str(ioE), QMessageBox.Ok)
+            QMessageBox.information(self, "OpenSerial", str(ioE), QMessageBox.Ok)
             self.serDict[cfg[0]].close()
             self.OpenSerial()
         except Exception as err:
-            QMessageBox.information(self, "打开串口异常", str(err), QMessageBox.Ok)
+            QMessageBox.information(self, "OpenSerial", str(err), QMessageBox.Ok)
 
 
     def CloseSerial(self, serPort):
@@ -206,7 +208,7 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
                 del self.tab_pageDict[serPort]
 
         except serial.SerialException as e:
-            QMessageBox.information(self, "关闭串口失败", str(e), QMessageBox.Ok)
+            QMessageBox.information(self, "CloseSerial", str(e), QMessageBox.Ok)
         except Exception as err:
             QMessageBox.information(self, "CloseSerial", str(err), QMessageBox.Ok)
 
@@ -285,9 +287,9 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
                 else:
                     pass
         except serial.SerialException as serE:
-            QMessageBox.information(self, "串口接收异常", str(serE), QMessageBox.Ok)
+            QMessageBox.information(self, "Thread_RecvDataFormSerial", str(serE), QMessageBox.Ok)
         except IOError as ioE:
-            QMessageBox.information(self, "", str(ioE), QMessageBox.Ok)
+            QMessageBox.information(self, "Thread_RecvDataFormSerial", str(ioE), QMessageBox.Ok)
         except Exception as err:
             QMessageBox.information(self, "Thread_RecvDataFormSerial", str(err), QMessageBox.Ok)
 
@@ -329,22 +331,24 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
 
                 index += self.serPackLen
 
-            # 解码后的数据存文件
-            if self.saveflagDict[port]:
-                day = int(sendData[0][0] / 86400)
-                if day > self.txtfileDayDict[port]:
-                    self.txtfileDict[port].close()
+            if sendData:
+                if self.saveflagDict[port]:
+                    day = int(sendData[0][0] / 86400)
+                    if day > self.txtfileDayDict[port]:
+                        self.txtfileDict[port].close()
 
-                    self.txtfileDayDict[port] = day
-                    fname = 'data\\' + port + '_Data_' + time.strftime("%Y%m%d%H%M%S", time.localtime(t)) + '.txt'
-                    self.txtfileDict[port] = open(fname, 'w')
+                        self.txtfileDayDict[port] = day
+                        fname = 'data\\' + port + '_Data_' + time.strftime("%Y%m%d%H%M%S", time.localtime(t)) + '.txt'
+                        self.txtfileDict[port] = open(fname, 'w')
 
-                    self.emit()
+                        self.emit()
 
-                for w in writData:
-                    self.txtfileDict[port].writelines(w + '\r\n')
+                    for w in writData:
+                        self.txtfileDict[port].writelines(w + '\r\n')
 
-            self.sinRefresh.emit(port, sendData)
+                self.sinRefresh.emit(port, sendData)
+            else:
+                pass
             return bytes()
         except Exception as err:
             QMessageBox.information(self, "PorcessInclinometer", str(err), QMessageBox.Ok)
@@ -385,7 +389,7 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
 
                 # time, frameID, gyro_dx, gyro_dy, gyro_dz, aac_dx, acc_dy, acc_z, gyro_tx, gyro_ty, gyro_tz, aaa_tx, acc_ty, acc_tz
                 lpack = [t]
-                lpack.append(pack[3])
+                lpack.append(pack[6])
                 for i in range(3):
                     lpack.append(round(pack[7 + i] * 1e-5, 8))
                 for i in range(3):
@@ -418,7 +422,8 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
 
     def reset_figure(self,serPort):
         if serPort in self.tab_pageDict:
-            self.tab_pageDict[serPort].rest
+            pass
+
 
 
 if __name__ == "__main__":

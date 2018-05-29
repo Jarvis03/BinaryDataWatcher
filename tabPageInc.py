@@ -1,9 +1,9 @@
 
 from PyQt5 import QtCore, QtGui, QtWidgets
-from PyQt5.QtWidgets import QSizePolicy, QVBoxLayout, QLineEdit, QMessageBox
 
-from MyWidgets import MyFigure_Inc
+from MyWidgets import get_time_stamp
 from MyWidgets import QTextEdit_AppendEnable
+from MyWidgets import MyFigure_Inc
 
 
 class tabPage_Inclinometer(QtWidgets.QWidget):
@@ -42,6 +42,7 @@ class tabPage_Inclinometer(QtWidgets.QWidget):
         self.btn_stop.clicked['bool'].connect(self.Pause)
         self.btn_clear.clicked.connect(self.textEdit.clear)
 
+        self.sinOnDraw[list].connect(self.widget.on_draw())
 
     def Pause(self,pressed):
         if pressed:
@@ -50,3 +51,15 @@ class tabPage_Inclinometer(QtWidgets.QWidget):
         else:
             self.btn_stop.setText('暂停')
             self.textEdit.setAppendeEnable(True)
+
+    def Refresh(self, ld):
+        if not ld:
+            return
+        for d in ld:
+            ts = get_time_stamp(d[0])
+            self.textEdit.append(ts + ": " + str(d[1:]))
+
+        self.sinOnDraw.emit(ld)
+
+    def reset_figure(self):
+        self.widget.resetFigure()

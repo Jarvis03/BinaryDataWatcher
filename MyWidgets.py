@@ -1,4 +1,5 @@
 import sys
+import time
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtWidgets import QSizePolicy, QVBoxLayout, QLineEdit, QMessageBox
@@ -7,20 +8,16 @@ from PyQt5.QtCore import QTimer, QThread
 import serial
 import serial.tools.list_ports
 
+import  numpy as np
+
 import matplotlib
 matplotlib.use('Qt5Agg')
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5 import NavigationToolbar2QT as NavigationToolbar
-from matplotlib.animation import FuncAnimation
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
 
-from tabPageImu import tabPage_Imu
-from tabPageInc import tabPage_Inclinometer
-
-import time
-import  numpy as np
+import matplotlib.dates as matdates
 
 
 def get_time_stamp(ct):
@@ -29,174 +26,6 @@ def get_time_stamp(ct):
     data_secs = (ct - int(ct)) * 1000
     time_stamp = "%s.%03d" % (data_head, data_secs)
     return time_stamp
-
-class MyFigureCanvas(QtWidgets.QWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-
-        plt.rcParams['font.sans-serif'] = ['FangSong']  # 指定默认字体
-        plt.rcParams['axes.unicode_minus'] = False
-
-        self.figure = Figure((5.0, 4.0), dpi=100)
-
-        self.canvas = FigureCanvas(self.figure)
-        self.canvas.setParent(self)
-        self.toolbar = NavigationToolbar(self.canvas, self)
-
-        self.textbox = QLineEdit()
-        self.textbox.setMinimumWidth(200)
-
-        vbox = QVBoxLayout(self)
-        vbox.addWidget(self.toolbar)
-        vbox.addWidget(self.canvas)
-
-    def myDraw(self,ld):
-        pass
-
-class MyFigure_Inc(MyFigureCanvas):
-    def __init__(self, parent=None):
-
-        super().__init__(parent)
-
-        self.axes = self.figure.add_subplot(111)
-        self.axes.grid(True)
-        self.axes.set_title("倾斜仪读数显示", fontsize=11)
-        self.axes.set_xlabel('帧计数')
-        self.axes.set_ylabel('器件读数（标注单位）')
-
-        self.x = [None] * 5
-        self.y = [None] * 5
-        self.xline = self.axes.plot(self.x,range(5),label='X 方向倾角', color='r')
-        self.yline = self.axes.plot(self.y, range(5), label='Y 方向倾角', color='g')
-
-        self.axes.set_autoscale_on(True)
-
-        self.timerC = QTimer(self)
-        self.timerC.timeout.connect(self.TimerDraw)
-        self.timerC.start(30000)
-
-    def TimerDraw(self):
-        self.canvas.draw()
-        pass
-
-    def myDraw(self, ld):
-        try:
-            if not ld:
-                return
-            nd = np.array(ld)
-
-            for i in range(len(self.axList)):
-                self.xline.set_data(nd[:,1],nd[:,0])
-                self.yline.set_data(nd[:, 2], nd[:, 0])
-
-                self.plot(self.xline)
-                self.plot(self.yline)
-        except Exception as err:
-            QMessageBox.information(self, "myDraw", str(err), QMessageBox.Ok)
-
-    def resetFigure(self):
-        try:
-            self.timerC.stop()
-            self.axes.clear()
-
-            self.axes = self.figure.add_subplot(111)
-            self.axes.grid(True)
-            self.axes.set_title("倾斜仪读数显示", fontsize=11)
-            self.axes.set_xlabel('帧计数')
-            self.axes.set_ylabel('器件读数（标注单位）')
-
-            self.x = [None] * 5
-            self.y = [None] * 5
-            self.xline = self.axes.plot(self.x, range(5), label='X 方向倾角', color='r')
-            self.yline = self.axes.plot(self.y, range(5), label='Y 方向倾角', color='g')
-
-            self.axes.set_autoscale_on(True)
-
-            self.timerC.start(30000)
-
-            pass
-        except Exception as err:
-            QMessageBox.information(self, "resetFigure", str(err), QMessageBox.Ok)
-
-        pass
-
-class MyFigure_Imu(MyFigureCanvas):
-    finished = QtCore.pyqtSignal()
-    def __init__(self, parent=None):
-        super().__init__(parent)
-
-        self.xleft = 0
-
-        self .axList = list()
-        title = ['gyro_dx', 'gyro_dy', 'gyro_dz', 'acc_dx', 'acc_dy', 'acc_dz']
-        self.figure.set_constrained_layout(True)
-        self.figure.set_constrained_layout_pads(w_pad=0.4, h_pad=0.2, hspace=0.1, wspace=0.05)
-        for a in range(6):
-            ax = self.figure.add_subplot(2, 3, a+1)
-
-            ax.grid(True)
-            ax.set_title(title[a], fontsize=11)
-            ax.set_xlabel('帧计数')
-            ax.set_ylabel('器件读数（标注单位）')
-
-            ax.set_autoscale_on(True)
-            self.axList.append(ax)
-
-        self.canvas.draw()
-
-        # for ax in self.axList:
-        #     self.bgList.append(self.canvas.copy_from_bbox(ax.bbox))
-
-        self.timerC = QTimer(self)
-        self.timerC.timeout.connect(self.TimerDraw)
-        self.timerC.start(1000)
-
-    def TimerDraw(self):
-        self.canvas.draw()
-        pass
-
-    def myDraw(self, ld):
-        try:
-            if not ld:
-                return
-            if ld[-1][1] > self.xleft+600:
-                self.xleft = ld[-1][1]
-                for ax in self.axList:
-                    ax.set_xlim(self.xleft, self.xleft+600)
-
-            nd = np.array(ld)
-
-            for i in range(len(self.axList)):
-                if i<3:
-                    color = 'b'
-                else:
-                    color = 'g'
-
-                # self.canvas.restore_region(self.bgList[i])
-                # if not self.axList[i].lines:
-                #     self.axList[i].plot(nd[:, 1], nd[:, i + 2], color=color)
-                # else:
-                #     self.axList[i].lines[0].set_data(nd[:, 1], nd[:, i+2])
-                # self.axList[i].draw_artist(self.axList[i].lines[0])
-                #
-                # self.canvas.blit(self.axList[i].bbox)
-                #
-                # self.axList[i].set_xlim(self.xleft, self.xleft + 600)
-
-                while self.axList[i].lines:
-                    del self.axList[i].lines[0]
-                self.axList[i].plot(nd[:, 1], nd[:, i+2], color=color)
-                #self.axList[i].draw_artist(self.axList[i].lines[0])
-
-                # bom,top = self.axList[i].get_ylim()
-                # vline = self.axList[i].vlines(nd[-1,1], bom, nd[-1,i+2], linestyles='dotted', color='r')
-                # self.axList[i].add_line(vline)
-            #self.canvas.draw()
-        except Exception as err:
-            QMessageBox.information(self, "PorcessInclinometer", str(err), QMessageBox.Ok)
-
-    def resetFigure(self):
-        pass
 
 class QComboBox_SelSerialNum(QtWidgets.QComboBox):
     def __init__(self, parent=None):
@@ -226,171 +55,151 @@ class QTextEdit_AppendEnable(QtWidgets.QTextEdit):
     def setAppendeEnable(self, enable=True):
         self.appendEnable = enable
 
-class MytabPage_Inclinometer(tabPage_Inclinometer):
-
-    sinOnDraw = QtCore.pyqtSignal(list)
-
-    def __init__(self,parent=None):
+class MyFigureCanvas(QtWidgets.QWidget):
+    def __init__(self, parent=None):
         super().__init__(parent)
 
-        self.sinOnDraw[list].connect(self.widget.myDraw)
-        self.sigOnReset[list].connect(self.widget.resetFigure)
+        plt.rcParams['font.sans-serif'] = ['FangSong']  # 指定默认字体
+        plt.rcParams['axes.unicode_minus'] = False
 
-    def Refresh(self, ld):
-        for d in ld:
-            ts = get_time_stamp(d[0])
-            self.textEdit.append(ts + ": "+ str(d[1:]))
-        self.sinOnDraw.emit(ld)
+        self.figure = Figure((5.0, 4.0), dpi=100)
 
-    def reset_figure(self):
-        self.widget.resetFigure()
+        self.canvas = FigureCanvas(self.figure)
+        self.canvas.setParent(self)
+        self.toolbar = NavigationToolbar(self.canvas, self)
 
+        self.textbox = QLineEdit()
+        self.textbox.setMinimumWidth(200)
 
-class MytabPage_Imu(tabPage_Imu):
-    sinOnDraw = QtCore.pyqtSignal(list)
+        vbox = QVBoxLayout(self)
+        vbox.addWidget(self.toolbar)
+        vbox.addWidget(self.canvas)
 
-    def __init__(self,parent=None):
+    def on_draw(self,ld):
+        pass
+
+class MyFigure_Inc(MyFigureCanvas):
+    def __init__(self, parent=None):
+
         super().__init__(parent)
 
-        self.label_starttime.setText("端口启动时间：" + time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
-        self.label_duration.setText("运行时长：0")
-        self.label_frameCount.setText("接收数据总帧数：0")
+        self.axes = self.figure.add_subplot(111)
+        self.axes.grid(True)
+        self.axes.set_title("倾斜仪读数显示", fontsize=11)
+        self.axes.set_xlabel('时间')
+        self.axes.set_ylabel('--')
+        self.axes.set_ylim(auto=True)
 
-        self.avgCount = 1000  # 平均值个数
-
-        self.tDuration = 0
-        self.frameCount = 0
-
+        # 绘图数据，每小时清零（3600*5）
+        self.maxDataLen = 18000
         self.drawData = list()
-        self.lastData = list()
-        self.tableData = list()  # 用于表格显示的实时数据
 
-        self.sumAll = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        self.avgAll = [0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # 用于表格显示的统计数据
+        self.canvas.draw()
 
-        self.sumDuration = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        self.avgDuartion = list()  # 用于表格显示的统计数据
+        self.timerDraw = QTimer(self)
+        self.timerDraw.timeout.connect(self.on_timer)
+        self.timerDraw.start(1000)
 
-        self.refreshFlag = True  # 刷新页面的标志（为false时：数据不更新，显示不更新）
-        self.pauseFlag = False  # 暂停刷新标志（为true时：数据更新，计时更新，图、表不更新）
+    def on_timer(self):
+        self.canvas.draw()
 
-        self.timerC = QTimer(self)
-        self.timerC.timeout.connect(self.TimerFrameCount)
-        self.timerC.start(1000)
-
-        self.btn_reset.clicked.connect(self.BtnReset)
-        self.btn_Pause.clicked[bool].connect(self.BtnPauseTable)
-        self.sinOnDraw[list].connect(self.widget.myDraw)
-
-    def BtnReset(self):
-        # 暂停刷新
-        self.timerC.stop()
-        self.refreshFlag = False
-
-        # 计数复位
-        self.tDuration = 0
-        self.frameCount = 0
-        self.label_starttime.setText("端口启动时间：" + time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
-        self.label_duration.setText("运行时长：%s 秒" % self.tDuration)
-        self.label_frameCount.setText("接收数据总帧数: %s 帧" % self.frameCount)
-
-        # 表格复位
-        self.tableData.clear()
-        self.sumAll.clear()
-        self.sumAll = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        self.avgAll = [0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        self.sumDuration = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        self.avgDuartion.clear()
-
-        self.tableWidget.clearContents()
-        self.tableWidget_2.clearContents()
-
-        # 图像复位
-        self.drawData.clear()
-        self.widget.resetFigure()
-
-        # 开始刷新
-        self.timerC.start(1000)
-        self.refreshFlag = True
-
-    def BtnPauseTable(self, pressed):
-        if pressed:
-            self.pauseFlag = True
-            self.btn_Pause.setText('继续')
-        else:
-            self.pauseFlag = False
-            self.btn_Pause.setText('暂停')
-
-    def TimerFrameCount(self):
-        self.tDuration += 1
-        self.label_duration.setText("运行时长：%s" % self.tDuration)
-        self.label_frameCount.setText("接收数据总帧数: %s" % self.frameCount)
-
-    def Refresh(self, ld):
-        if not self.refreshFlag:
-            return
+    def on_draw(self, ld):
         try:
+            if not ld:
+                return
+
+            if len(self.drawData) > self.maxDataLen:
+                self.drawData.clear()
+
             for d in ld:
-                # 缓存绘图需要的数据
                 self.drawData.append(d)
-                if len(self.drawData) > 1800:
-                    del self.drawData[0]
 
-                self.frameCount += 1  # 可能需要加锁
+            nd = np.array(self.drawData)
 
-                # 统计数据
-                if d[1] % self.avgCount == 0:  # 10000包数据
+            # # 横轴为时间的处理
+            # dates = matdates.epoch2num(nd[:, 0])
+            # self.axes.plot_date(dates, nd[:,1],color='r')
+            # self.axes.plot_date(dates, nd[:,2], color='g')
+            # self.axes.xaxis.set_major_formatter(matdates.DateFormatter('%m%d %H:%M:%S'))
+            # self.axes.xaxis.set_tick_params(rotation=30, labelsize=8)
 
-                    avg = list()
-                    avg.append(d[1] - 1)
+            self.axes.lines.clear()
+            self.axes.plot(nd[:,0], nd[:, 1],color='r',label='X 方向倾角')
+            self.axes.plot(nd[:,0], nd[:, 2], color='g',label='Y 方向倾角')
 
-                    for i in range(6):
-                        avg.append(self.sumDuration[i] / self.avgCount)
-
-                    self.avgDuartion.append(avg)
-                    if len(self.avgDuartion) > 6:
-                        del self.avgDuartion[0]
-
-                    # 重新开始计算和值
-                    self.sumDuration = d[2:8].copy()
-                else:
-                    for i in range(6):
-                        self.sumDuration[i] += d[i + 2]
-
-                # 总平均
-                self.avgAll[0] = d[1]
-                for i in range(6):
-                    self.sumAll[i] += d[i + 2]
-                    self.avgAll[i + 1] = self.sumAll[i] / self.frameCount
-
-                # 实时数据
-                self.tableData.append(d)
-                if len(self.tableData) > self.tableRowCount:
-                    del self.tableData[0]
-
-            # 刷新表格数据
-            if not self.pauseFlag:
-                self.tableWidget.clearContents()
-                for row in range(len(self.tableData)):
-                    for col in range(len(self.tableData[row])):
-                        newItem = QtWidgets.QTableWidgetItem(str(self.tableData[row][col]))
-                        self.tableWidget.setItem(row, col, newItem)
-                self.tableWidget.selectRow(len(self.tableData) - 1)
-
-                self.tableWidget_2.clearContents()
-                for col in range(len(self.avgAll)):
-                    newItem = QtWidgets.QTableWidgetItem(str(self.avgAll[col]))
-                    self.tableWidget_2.setItem(0, col, newItem)
-
-                for row in range(len(self.avgDuartion)):
-                    for col in range(len(self.avgDuartion[row])):
-                        newItem = QtWidgets.QTableWidgetItem(str(self.avgDuartion[row][col]))
-                        self.tableWidget_2.setItem(row + 1, col, newItem)
-
-            # 发送绘图信号
-            if not self.pauseFlag and self.drawData:
-                self.sinOnDraw.emit(self.drawData)
-                pass
+            self.axes.set_xlim(left=nd[0, 0], auto=True)
+            self.axes.legend(loc='upper left', frameon=True)
 
         except Exception as err:
-            QMessageBox.information(self, "PorcessInclinometer", str(err), QMessageBox.Ok)
+            QMessageBox.information(self, "on_draw", str(err), QMessageBox.Ok)
+
+class MyFigure_Imu(MyFigureCanvas):
+    finished = QtCore.pyqtSignal()
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        # 绘图数据，每10min清零（60000）
+        self.maxDataLen = 18000
+        self.drawData = list()
+
+        self .axList = list()
+        title = ['gyro_dx', 'gyro_dy', 'gyro_dz', 'acc_dx', 'acc_dy', 'acc_dz']
+        self.figure.set_constrained_layout(True)
+        self.figure.set_constrained_layout_pads(w_pad=0.4, h_pad=0.2, hspace=0.1, wspace=0.05)
+        for a in range(6):
+            ax = self.figure.add_subplot(2, 3, a+1)
+
+            ax.grid(True)
+            ax.set_title(title[a], fontsize=11)
+            ax.set_xlabel('帧计数')
+            ax.set_ylabel('器件读数（标注单位）')
+            ax.set_ylim(auto=True)
+            self.axList.append(ax)
+
+        self.canvas.draw()
+
+        self.timerDraw = QTimer(self)
+        self.timerDraw.timeout.connect(self.on_timer)
+        self.timerDraw.start(1000)
+
+    def on_timer(self):
+        self.canvas.draw()
+
+    def on_draw(self, ld):
+        if not ld:
+            return
+
+        try:
+            if len(self.drawData) > self.maxDataLen:
+                self.drawData.clear()
+
+            for d in ld:
+                self.drawData.append(d)
+
+            nd = np.array(self.drawData)
+
+            for i in range(len(self.axList)):
+                if i<3:
+                    color = 'r'
+                else:
+                    color = 'g'
+
+                self.axList[i].lines.clear()
+                self.axList[i].plot(nd[:, 1], nd[:, i+2], color=color)
+                self.axList[i].set_xlim(left=nd[0, 1], auto=True)
+
+        except Exception as err:
+            QMessageBox.information(self, "on_draw", str(err), QMessageBox.Ok)
+
+
+    def reset_draw(self):
+        self.timerDraw.stop()
+
+        self.drawData.clear()
+
+        for i in range(len(self.axList)):
+            self.axList[i].lines.clear()
+
+        self.canvas.draw()
+
+        self.timerDraw.start(1000)

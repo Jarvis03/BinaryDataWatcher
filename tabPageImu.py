@@ -1,10 +1,14 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtWidgets import QSizePolicy, QVBoxLayout, QLineEdit, QMessageBox
+from PyQt5.QtCore import QTimer, QThread
 
 from MyWidgets import MyFigure_Imu
 
+import time
+
 class tabPage_Imu(QtWidgets.QWidget):
     sinOnDraw = QtCore.pyqtSignal(list)
+    sinResetDarw = QtCore.pyqtSignal()
 
     def __init__(self,parent=None):
         super().__init__(parent)
@@ -24,7 +28,7 @@ class tabPage_Imu(QtWidgets.QWidget):
         self.tableWidget.setGridStyle(QtCore.Qt.DotLine)
         self.tableWidget.setWordWrap(True)
         self.tableWidget.setCornerButtonEnabled(True)
-        self.tableWidget.setRowCount(self.tableRowCount)
+        self.tableWidget.setRowCount(0)
         self.tableWidget.setColumnCount(self.tableColCount)
         self.tableWidget.setObjectName("tableWidget")
 
@@ -219,4 +223,92 @@ class tabPage_Imu(QtWidgets.QWidget):
 
         self.btn_reset.setText("复位")
         self.btn_Pause.setText("暂停")
+
+        self.label_starttime.setText("端口启动时间：" + time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
+        self.label_duration.setText("运行时长：0")
+        self.label_frameCount.setText("接收数据总帧数：0")
+
+        self.tDuration = 0      # 数据接收时长
+        self.frameCount = 0     # 数据帧计数
+
+        self.drawData = list()
+
+        self.refreshFlag = True  # 刷新页面的标志（为false时：数据不更新，显示不更新）
+        self.pauseFlag = False  # 暂停刷新标志（为true时：数据更新，计时更新，图、表不更新）
+
+        self.timerC = QTimer(self)
+        self.timerC.timeout.connect(self.TimerFrameCount)
+        self.timerC.start(1000)
+
+        self.btn_reset.clicked.connect(self.BtnReset)
+        self.btn_Pause.clicked[bool].connect(self.BtnPauseTable)
+        self.sinOnDraw[list].connect(self.widget.on_draw)
+        self.sinResetDarw.connect(self.widget.reset_draw)
+
+    def BtnReset(self):
+        # 暂停刷新
+        self.timerC.stop()
+        self.refreshFlag = False
+
+        # 计数复位
+        self.tDuration = 0
+        self.frameCount = 0
+        self.label_starttime.setText("端口启动时间：" + time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
+        self.label_duration.setText("运行时长：%s 秒" % self.tDuration)
+        self.label_frameCount.setText("接收数据总帧数: %s 帧" % self.frameCount)
+
+        # 图像复位
+        self.sinResetDarw.emit()
+
+        # 表格复位
+        self.tableWidget.clearContents()
+        self.tableWidget.setRowCount(0)
+
+        # 开始刷新
+        self.timerC.start(1000)
+        self.refreshFlag = True
+
+    def BtnPauseTable(self, pressed):
+        if pressed:
+            self.pauseFlag = True
+            self.btn_Pause.setText('继续')
+        else:
+            self.pauseFlag = False
+            self.btn_Pause.setText('暂停')
+
+    def TimerFrameCount(self):
+        self.tDuration += 1
+        self.label_duration.setText("运行时长：%s" % self.tDuration)
+        self.label_frameCount.setText("接收数据总帧数: %s" % self.frameCount)
+
+    def Refresh(self, ld):
+        if not self.refreshFlag:
+            return
+
+        if not ld:
+            return
+
+        try:
+            for d in ld:
+                self.drawData.append(d)
+                self.frameCount += 1
+
+                if not self.pauseFlag:
+                    row = self.tableWidget.rowCount()
+                    self.tableWidget.insertRow(row)
+                    for col in range(self.tableColCount):
+                        newItem = QtWidgets.QTableWidgetItem(str(d[col]))
+                        self.tableWidget.setItem(row, col, newItem)
+
+                    if row == self.tableRowCount: # 表格已满，向上滚动一行
+                        self.tableWidget.removeRow(0)
+
+            if not self.pauseFlag:
+                self.tableWidget.selectRow(self.tableWidget.rowCount() - 1)
+
+                self.sinOnDraw.emit(self.drawData)
+                self.drawData.clear()
+
+        except Exception as err:
+            QMessageBox.information(self, "Refresh", str(err), QMessageBox.Ok)
 
