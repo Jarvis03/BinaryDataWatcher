@@ -341,8 +341,6 @@ class MainWin(QtWidgets.QMainWindow, Ui_MainWindow):
                         fname = 'data\\' + port + '_Data_' + time.strftime("%Y%m%d%H%M%S", time.localtime(t)) + '.txt'
                         self.txtfileDict[port] = open(fname, 'w')
 
-                        self.emit()
-
                     for w in writData:
                         self.txtfileDict[port].writelines(w + '\r\n')
 

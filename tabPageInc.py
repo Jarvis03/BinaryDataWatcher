@@ -42,7 +42,7 @@ class tabPage_Inclinometer(QtWidgets.QWidget):
         self.btn_stop.clicked['bool'].connect(self.Pause)
         self.btn_clear.clicked.connect(self.textEdit.clear)
 
-        self.sinOnDraw[list].connect(self.widget.on_draw())
+        self.sinOnDraw[list].connect(self.widget.on_draw)
 
     def Pause(self,pressed):
         if pressed:
