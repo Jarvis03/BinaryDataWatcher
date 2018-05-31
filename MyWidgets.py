@@ -4,6 +4,8 @@ import time
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtWidgets import QSizePolicy, QVBoxLayout, QLineEdit, QMessageBox
 from PyQt5.QtCore import QTimer, QThread
+from PyQt5.QtGui import QTextDocument
+
 
 import serial
 import serial.tools.list_ports
@@ -45,11 +47,15 @@ class QComboBox_SelSerialNum(QtWidgets.QComboBox):
 class QTextEdit_AppendEnable(QtWidgets.QTextEdit):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.document().setMaximumBlockCount(18000)
         self.appendEnable = True
+
 
     def append(self, p_str):
         if self.appendEnable == False:
             return
+        if self.document().blockCount() >= 18000:
+            self.clear()
         super().append(p_str)
 
     def setAppendeEnable(self, enable=True):
